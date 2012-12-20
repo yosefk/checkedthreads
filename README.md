@@ -48,6 +48,17 @@ a computational process with no I/O, then it's hard to see how parallel fors are
 the cache fully where a data-parallel system would end up replicating data in many L1 caches. But it still
 doesn't scale and doesn't load-balance.) 
 
+Automatic parallelization
+=========================
+
+...Is nice, because it guarantees correctness. However, shuffling and instrumentation are very close to
+guaranteed correctness, and automatic parallelization is impossible for any popular imperative language
+and furthermore, it can never "fully relieve programmers of parallelism burdens" because iterative algorithms
+must still be manually converted to non-iterative, parallelizable algorithms. A framework with correctness
+achieved using dynamic verification in an existing popular language is not necessarily more expensive to
+adopt than a compiler staticallly guaranteeing correctness that requires to switch to a different
+language or to use a restricted subset of your current language in much of your code.
+
 Data-dependent termination/task creation
 ========================================
 
