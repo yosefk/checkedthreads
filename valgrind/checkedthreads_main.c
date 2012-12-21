@@ -264,11 +264,6 @@ static Event events[N_EVENTS];
 static Int   events_used = 0;
 
 
-static VG_REGPARM(2) void trace_instr(Addr addr, SizeT size)
-{
-   VG_(printf)("I  %08lx,%lu\n", addr, size);
-}
-
 static VG_REGPARM(2) void trace_load(Addr addr, SizeT size)
 {
    VG_(printf)(" L %08lx,%lu\n", addr, size);
@@ -297,11 +292,12 @@ static void flushEvents(IRSB* sb)
    for (i = 0; i < events_used; i++) {
 
       ev = &events[i];
+
+      helperAddr = NULL;
       
       // Decide on helper fn to call and args to pass it.
       switch (ev->ekind) {
-         case Event_Ir: helperName = "trace_instr";
-                        helperAddr =  trace_instr;  break;
+         case Event_Ir: helperAddr = NULL; break;
 
          case Event_Dr: helperName = "trace_load";
                         helperAddr =  trace_load;   break;
@@ -316,15 +312,20 @@ static void flushEvents(IRSB* sb)
       }
 
       // Add the helper.
-      argv = mkIRExprVec_2( ev->addr, mkIRExpr_HWord( ev->size ) );
-      di   = unsafeIRDirty_0_N( /*regparms*/2, 
-                                helperName, VG_(fnptr_to_fnentry)( helperAddr ),
-                                argv );
-      addStmtToIRSB( sb, IRStmt_Dirty(di) );
+      if (helperAddr) {
+          argv = mkIRExprVec_2( ev->addr, mkIRExpr_HWord( ev->size ) );
+          di   = unsafeIRDirty_0_N( /*regparms*/2, 
+                  helperName, VG_(fnptr_to_fnentry)( helperAddr ),
+                  argv );
+          addStmtToIRSB( sb, IRStmt_Dirty(di) );
+      }
    }
 
    events_used = 0;
 }
+
+// original comment from Lackey follows; checkedthreads follows the advice
+// and indeed doesn't add calls to trace_instr in flushEvents.
 
 // WARNING:  If you aren't interested in instruction reads, you can omit the
 // code that adds calls to trace_instr() in flushEvents().  However, you
