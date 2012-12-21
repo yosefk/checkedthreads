@@ -12,7 +12,7 @@ struct {
     volatile char payload[MAX_CMD];
 } g_ct_valgrind_cmd = { 0, CONST_MAGIC, "" };
 
-void ct_valgrind_ptr(int oft, const void* ptr) {
+void ct_valgrind_ptr(int oft, volatile const void* ptr) {
     *(volatile const void**)&g_ct_valgrind_cmd.payload[oft] = ptr;
 }
 
@@ -35,16 +35,19 @@ void ct_valgrind_init(int num_threads) {
 void ct_valgrind_fini(void) {
 }
 
-void ct_valgrind_for(int n, ct_ind_func f, void* context) {
+
+void ct_valgrind_for_loop(int n, ct_ind_func f, void* context) {
     int i;
     ct_valgrind_cmd("begin_for");
 
-    /* FIXME: make the pointer more precise */
-    ct_valgrind_ptr(8, &i+1024/4);
-    ct_valgrind_cmd("stackbot");
-
     /* FIXME: we ought to have index randomization for proper coverage */
     for(i=0; i<n; ++i) {
+        /* thread ID != index because of thread-local storage
+           [and because of the ID range being smaller... but that's another matter.] */
+        ct_valgrind_int(4, i%255); /* there are 255 IDs (0 is reserved;
+                                      1 is added by Valgrind and subtracted back in messages). */
+        ct_valgrind_cmd("thrd");
+
         ct_valgrind_int(4, i);
         ct_valgrind_cmd("iter");
 
@@ -54,6 +57,17 @@ void ct_valgrind_for(int n, ct_ind_func f, void* context) {
         ct_valgrind_cmd("done");
     }
     ct_valgrind_cmd("end_for");
+}
+
+/* "volatile" for portable inlining prevention (instead of __attribute__((noinline))) */
+volatile ct_imp_for_func g_ct_valgrind_for = &ct_valgrind_for_loop;
+
+void ct_valgrind_for(int n, ct_ind_func f, void* context) {
+    volatile int local=0;
+    ct_valgrind_ptr(8, &local);
+    ct_valgrind_cmd("stackbot");
+
+    (*g_ct_valgrind_for)(n,f,context);
 }
 
 ct_imp g_ct_valgrind_imp = {

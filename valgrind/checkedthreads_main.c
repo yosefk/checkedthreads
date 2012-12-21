@@ -306,6 +306,7 @@ static Int g_ct_curr_thread = 0;
 static ct_page* g_ct_pagetab[NUM_PAGES] = {0};
 static ct_page* g_ct_last_alloc_page = 0; /* head of the allocated pages list */
 static char* g_ct_stackbot = 0;
+static char* g_ct_stackend = 0;
 
 static ct_page* ct_get_page(Addr a)
 {
@@ -333,15 +334,27 @@ static void ct_clear_pagetab(void)
     g_ct_last_alloc_page = 0;
 }
 
+static char* ct_stack_end(void)
+{
+    ThreadId tid = VG_(get_running_tid)();
+    return (char*)(VG_(thread_get_stack_max)(tid) - VG_(thread_get_stack_size)(tid));
+}
+
 static Bool ct_suppress(Addr addr)
 {
     char* p = (char*)addr;
-    /* FIXME: instead of hard-coding 4096, we should monitor the real stack size. 
-       another thing is stack growth direction.
-     */
-    if(p >= g_ct_stackbot-4096 && p < g_ct_stackbot) {
+    /* ignore writes to the stack below stackbot (the point where the ct framework was entered.) */
+    if(p >= g_ct_stackend && p < g_ct_stackbot) {
         return True;
     }
+    if(p < g_ct_stackend) { /* perhaps the stack grew in the meanwhile? */
+        g_ct_stackend = ct_stack_end();
+        /* repeat the test */
+        if(p >= g_ct_stackend && p < g_ct_stackbot) {
+            return True;
+        }
+    }
+    /* ignore writes to the command object. */
     if(p >= (char*)g_ct_last_cmd && p < (char*)(g_ct_last_cmd+1)) {
         return True;
     }
@@ -358,10 +371,10 @@ static inline void ct_on_access(Addr base, SizeT size, Bool store)
         int owner = page->owning_thread[page_index];
         if(owner && owner != g_ct_curr_thread) {
             if(!ct_suppress(addr)) {
-                VG_(printf)("error: thread %d accessed %p [%p,%d], owned by %d\n",
-                        g_ct_curr_thread,
+                VG_(printf)("checkedthreads: error - thread %d accessed %p [%p,%d], owned by %d\n",
+                        g_ct_curr_thread-1,
                         (void*)addr, (void*)base, (int)size,
-                        owner);
+                        owner-1);
                 VG_(get_and_pp_StackTrace)(VG_(get_running_tid)(), 20);
                 break;
             }
@@ -411,15 +424,23 @@ static void ct_process_command(ct_cmd* cmd)
     else if(ct_str_is(cmd->payload, "iter")) {
         if(clo_print_commands) VG_(printf)("iter %d\n", ct_cmd_int(cmd, 4));
         g_ct_active = True;
-        g_ct_curr_thread = ct_cmd_int(cmd, 4)+1; /* FIXME: thread != iter!! */
     }
     else if(ct_str_is(cmd->payload, "done")) {
         if(clo_print_commands) VG_(printf)("done %d\n", ct_cmd_int(cmd, 4));
         g_ct_active = False;
     }
+    else if(ct_str_is(cmd->payload, "thrd")) {
+        g_ct_curr_thread = ct_cmd_int(cmd, 4)+1;
+    }
     else if(ct_str_is(cmd->payload, "stackbot")) {
-        if(clo_print_commands) VG_(printf)("stackbot %p\n", (void*)ct_cmd_ptr(cmd, 8));
         g_ct_stackbot = (char*)ct_cmd_ptr(cmd, 8);
+        g_ct_stackend = ct_stack_end();
+        if(clo_print_commands) VG_(printf)("stackbot %p [stackend %p]\n",
+                (void*)g_ct_stackbot, (void*)g_ct_stackend);
+    }
+    else {
+        VG_(printf)("checkedthreads: WARNING - unknown command!\n");
+        VG_(get_and_pp_StackTrace)(VG_(get_running_tid)(), 20);
     }
     g_ct_last_cmd = cmd;
 }

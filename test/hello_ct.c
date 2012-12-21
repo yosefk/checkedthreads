@@ -34,7 +34,7 @@ void print_and_check_results(int array[]) {
 }
 
 int main() {
-    static int array[N]={0};
+    int array[N]={0};
 
     ct_init(THREADS, 0);
     ct_for(N, index_callback, array);
