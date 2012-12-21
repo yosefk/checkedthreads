@@ -1,0 +1,3 @@
+#!/bin/sh
+# TODO: check if g++ is available and if C++11 is supported.
+echo you can simply run make.
