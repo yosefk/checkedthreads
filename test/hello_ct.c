@@ -9,6 +9,9 @@
 void index_callback(int index, void* context) {
     int* array = (int*)context;
     array[index] = index*SCALE;
+    if(index==55) {
+        array[index+1] = index*SCALE;
+    }
 }
 
 void print_and_check_results(int array[]) {
@@ -31,7 +34,7 @@ void print_and_check_results(int array[]) {
 }
 
 int main() {
-    int array[N]={0};
+    static int array[N]={0};
 
     ct_init(THREADS, 0);
     ct_for(N, index_callback, array);

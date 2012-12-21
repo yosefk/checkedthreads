@@ -178,6 +178,9 @@
 #include "pub_tool_libcbase.h"
 #include "pub_tool_options.h"
 #include "pub_tool_machine.h"     // VG_(fnptr_to_fnentry)
+#include "pub_tool_mallocfree.h"
+#include "pub_tool_threadstate.h"
+#include "pub_tool_stacktrace.h"
 #include <stdint.h>
 
 /*------------------------------------------------------------*/
@@ -279,6 +282,97 @@ typedef struct {
     volatile char payload[MAX_CMD];
 } ct_cmd;
 
+ct_cmd* g_ct_last_cmd = 0; /* ignore writes to cmd */
+
+/* 16M of 16M pages (or 2^24 pages of 2^24 bytes each)
+   should work fine for virtual addresses of up to 48 bits. */
+#define PAGE_LSBS 24
+#define PAGE_MSBS 24
+#define PAGE_SIZE (1<<PAGE_LSBS)
+#define NUM_PAGES (1<<PAGE_MSBS)
+
+typedef struct ct_page_ {
+    /* 0 means "owned by none" (so is OK to access).
+       the rest means "owned by i" (so is OK to access for i only.) */
+    unsigned char owning_thread[PAGE_SIZE];
+    /* we keep a linked a list of allocated pages so as to not have
+       to traverse all indexes to find allocated pages. */
+    struct ct_page_* prev_alloc_page;
+    int index;
+} ct_page;
+
+static Bool g_ct_active = False;
+static Int g_ct_curr_thread = 0;
+static ct_page* g_ct_pagetab[NUM_PAGES] = {0};
+static ct_page* g_ct_last_alloc_page = 0; /* head of the allocated pages list */
+static char* g_ct_stackbot = 0;
+
+static ct_page* ct_get_page(Addr a)
+{
+    Int index = (Int)a >> PAGE_LSBS;
+    ct_page* page = g_ct_pagetab[index];
+    if(page == 0) {
+        page = (ct_page*)VG_(calloc)("page", 1, sizeof(ct_page));
+        page->prev_alloc_page = g_ct_last_alloc_page;
+        page->index = index;
+        g_ct_last_alloc_page = page;
+        g_ct_pagetab[index] = page;
+    }
+    return page;
+}
+
+static void ct_clear_pagetab(void)
+{
+    ct_page* page = g_ct_last_alloc_page;
+    while(page) {
+        ct_page* prev = page->prev_alloc_page;
+        g_ct_pagetab[page->index] = 0;
+        VG_(free)(page);
+        page = prev;
+    }
+    g_ct_last_alloc_page = 0;
+}
+
+static Bool ct_suppress(Addr addr)
+{
+    char* p = (char*)addr;
+    /* FIXME: instead of hard-coding 4096, we should monitor the real stack size. 
+       another thing is stack growth direction.
+     */
+    if(p >= g_ct_stackbot-4096 && p < g_ct_stackbot) {
+        return True;
+    }
+    if(p >= (char*)g_ct_last_cmd && p < (char*)(g_ct_last_cmd+1)) {
+        return True;
+    }
+    return False;
+}
+
+static inline void ct_on_access(Addr base, SizeT size, Bool store)
+{
+    SizeT i;
+    for(i=0; i<size; ++i) {
+        Addr addr = base+i;
+        ct_page* page = ct_get_page(addr);
+        int page_index = (Int)addr & ((1<<PAGE_LSBS)-1);
+        int owner = page->owning_thread[page_index];
+        if(owner && owner != g_ct_curr_thread) {
+            if(!ct_suppress(addr)) {
+                VG_(printf)("error: thread %d accessed %p [%p,%d], owned by %d\n",
+                        g_ct_curr_thread,
+                        (void*)addr, (void*)base, (int)size,
+                        owner);
+                VG_(get_and_pp_StackTrace)(VG_(get_running_tid)(), 20);
+                break;
+            }
+        }
+        if(store) {
+            /* update the owner */
+            page->owning_thread[page_index] = g_ct_curr_thread;
+        }
+    }
+}
+
 static Bool ct_str_is(volatile const char* variable, const char* constant)
 {
     int i=0;
@@ -289,6 +383,11 @@ static Bool ct_str_is(volatile const char* variable, const char* constant)
         ++i;
     }
     return True;
+}
+
+static Addr ct_cmd_ptr(ct_cmd* cmd, int oft)
+{
+    return *(Addr*)&cmd->payload[oft];
 }
 
 static Int ct_cmd_int(ct_cmd* cmd, int oft)
@@ -306,33 +405,51 @@ static void ct_process_command(ct_cmd* cmd)
     }
     else if(ct_str_is(cmd->payload, "end_for")) {
         if(clo_print_commands) VG_(printf)("end_for\n");
+        ct_clear_pagetab();
+        g_ct_curr_thread = 0;
     }
     else if(ct_str_is(cmd->payload, "iter")) {
         if(clo_print_commands) VG_(printf)("iter %d\n", ct_cmd_int(cmd, 4));
+        g_ct_active = True;
+        g_ct_curr_thread = ct_cmd_int(cmd, 4)+1; /* FIXME: thread != iter!! */
     }
     else if(ct_str_is(cmd->payload, "done")) {
         if(clo_print_commands) VG_(printf)("done %d\n", ct_cmd_int(cmd, 4));
+        g_ct_active = False;
     }
+    else if(ct_str_is(cmd->payload, "stackbot")) {
+        if(clo_print_commands) VG_(printf)("stackbot %p\n", (void*)ct_cmd_ptr(cmd, 8));
+        g_ct_stackbot = (char*)ct_cmd_ptr(cmd, 8);
+    }
+    g_ct_last_cmd = cmd;
 }
 
 static VG_REGPARM(2) void trace_load(Addr addr, SizeT size)
 {
+    if(g_ct_active) {
+        ct_on_access(addr, size, False);
+    }
+}
+
+static inline void ct_on_store(Addr addr, SizeT size)
+{
+   ct_cmd* p = (ct_cmd*)addr;
+   if(p->stored_magic == MAGIC) {
+       ct_process_command(p);
+   }
+   if(g_ct_active) {
+       ct_on_access(addr, size, True);
+   }
 }
 
 static VG_REGPARM(2) void trace_store(Addr addr, SizeT size)
 {
-   ct_cmd* p = (ct_cmd*)addr;
-   if(p->stored_magic == MAGIC) {
-       ct_process_command(p);
-   }
+    ct_on_store(addr, size);
 }
 
 static VG_REGPARM(2) void trace_modify(Addr addr, SizeT size)
 {
-   ct_cmd* p = (ct_cmd*)addr;
-   if(p->stored_magic == MAGIC) {
-       ct_process_command(p);
-   }
+    ct_on_store(addr, size);
 }
 
 

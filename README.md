@@ -64,6 +64,25 @@ Data-dependent termination
 
 As in, while instead of for; worth looking into.
 
+Races will be flagged; not necessarily bugs that are /also/ races
+=================================================================
+
+Some bugs are *also* race conditions. For instance, mallocing and accessing uninitialized memory
+will lead to different results depending on timing; it's also a bug in a serial program. Or,
+out of bounds accesses can yield different results depending on timing; they're also bugs
+in a serial program. Or, access to on-stack data after the function that allocated it returns, etc.
+
+These bugs will not necessarily be flagged as races by the Valgrind tool. What will be certainly be flagged
+as a race is something that has a chance to not be a bug in a serial program but also has a chance
+to be a race condition in its parallel version. For instance, access to initialized data through
+"legitimatly" obtained pointers will certainly be flagged as a race if there's a chance for it
+to be a race.
+
+TODO
+====
+
+PIC code support and a libcheckedthreads.so, possibly.
+
 Coding style
 ============
 
@@ -71,4 +90,5 @@ Coding style
 * Globals prefixed with g_ct/g_ctx; no static variables (all are extern).
 * Indentation: 1TBS, 4 spaces per level, no hard tabs.
 * Everything is lowercase, underscore_separated. Macros mostly UPPERCASE.
+* Valgrind tool code (at valgrind/) should use Valgrind style.
 * Style isn't that important.

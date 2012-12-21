@@ -2,7 +2,7 @@
 
 dirs = 'obj lib bin'.split()
 srcs = 'ct_api.c ctx_api.cpp serial_imp.c pthreads_imp.c valgrind_imp.c'.split()
-lib = 'libcheckedthreads.so'
+lib = 'checkedthreads'
 tests = 'hello_ct.c'.split()
 
 # utilities
@@ -13,10 +13,10 @@ import sys, os
 def build():
     for dir in dirs:
         mkdir(dir)
-    print '\nbuilding',lib
+    print '\nbuilding','lib'+lib
     for src in srcs:
         compile(src)
-    link('lib/'+lib,srcs)
+    link(lib,srcs)
     print '\nbuilding tests'
     for test in tests:
         buildtest(test)
@@ -44,24 +44,25 @@ def flags(compiler):
     return {
         'gcc':'-std=c89',
         'g++':'-std=c++0x', #TODO: configure
-    }[compiler] + ' -pedantic -Wall -Wextra -Werror'
+    }[compiler] + ' -pedantic -Wall -Wextra -Werror -g'
 
 def compile(fname):
-  ext = fname.split('.')[-1]
-  compiler = {'c':'gcc','cpp':'g++'}[ext]
-  src = 'src/'+fname
-  obj = 'obj/'+fname+'.o'
-  update('%s -c %s -o %s -fPIC -I include'%(compiler,src,obj),[obj],[src])
+    ext = fname.split('.')[-1]
+    compiler = {'c':'gcc','cpp':'g++'}[ext]
+    src = 'src/'+fname
+    obj = 'obj/'+fname+'.o'
+    update('%s -c %s -o %s -I include'%(compiler,src,obj),[obj],[src])
 
 def link(so,srcs):
-  objs = ['obj/%s.o'%src for src in srcs]
-  update('g++ -o %s -shared -fPIC %s'%(so,' '.join(objs)),[so],objs)
+    objs = ['obj/%s.o'%src for src in srcs]
+    #update('g++ -o lib/lib%s.so -shared -fPIC %s'%(so,' '.join(objs)),[so],objs)
+    update('ar cr lib/lib%s.a %s'%(so,' '.join(objs)),[so],objs)
 
 def buildtest(test):
-  name = test.split('.')[0]
-  bin = 'bin/'+name
-  src = 'test/'+test
-  update('g++ %s -o %s lib/libcheckedthreads.so -I include'%(src,bin),[bin],[src])
+    name = test.split('.')[0]
+    bin = 'bin/'+name
+    src = 'test/'+test
+    update('g++ %s -o %s lib/libcheckedthreads.a -I include'%(src,bin),[bin],[src])
 
 if __name__ == '__main__':
-  build()
+    build()

@@ -12,6 +12,10 @@ struct {
     volatile char payload[MAX_CMD];
 } g_ct_valgrind_cmd = { 0, CONST_MAGIC, "" };
 
+void ct_valgrind_ptr(int oft, const void* ptr) {
+    *(volatile const void**)&g_ct_valgrind_cmd.payload[oft] = ptr;
+}
+
 void ct_valgrind_int(int oft, int num) {
     *(volatile int32_t*)&g_ct_valgrind_cmd.payload[oft] = num;
 }
@@ -34,6 +38,10 @@ void ct_valgrind_fini(void) {
 void ct_valgrind_for(int n, ct_ind_func f, void* context) {
     int i;
     ct_valgrind_cmd("begin_for");
+
+    /* FIXME: make the pointer more precise */
+    ct_valgrind_ptr(8, &i+1024/4);
+    ct_valgrind_cmd("stackbot");
 
     /* FIXME: we ought to have index randomization for proper coverage */
     for(i=0; i<n; ++i) {
