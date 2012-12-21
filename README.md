@@ -59,7 +59,15 @@ achieved using dynamic verification in an existing popular language is not neces
 adopt than a compiler staticallly guaranteeing correctness that requires to switch to a different
 language or to use a restricted subset of your current language in much of your code.
 
-Data-dependent termination/task creation
-========================================
+Data-dependent termination
+==========================
 
-As in, while instead of for, and/or loop nesting; worth looking into.
+As in, while instead of for; worth looking into.
+
+Coding style
+============
+
+* Everything prefixed with ct_ (ctx_ for C++ identifiers).
+* Globals prefixed with g_ct/g_ctx; no static variables (all are extern).
+* Indentation: 1TBS.
+* Everything is lowercase, underscore_separated.
