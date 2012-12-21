@@ -185,26 +185,17 @@
 
 /* Command line options controlling instrumentation kinds, as described at
  * the top of this file. */
-static Bool clo_trace_mem       = False;
+static Bool clo_trace_mem       = True;
 
 static Bool lk_process_cmd_line_option(Char* arg)
 {
-   if VG_BOOL_CLO(arg, "--trace-mem",         clo_trace_mem) {}
-   else
-      return False;
-   
    return True;
 }
 
 static void lk_print_usage(void)
 {  
    VG_(printf)(
-"    --basic-counts=no|yes     count instructions, jumps, etc. [yes]\n"
-"    --detailed-counts=no|yes  count loads, stores and alu ops [no]\n"
-"    --trace-mem=no|yes        trace all loads and stores [no]\n"
-"    --trace-superblocks=no|yes  trace all superblock entries [no]\n"
-"    --fnname=<name>           count calls to <name> (only used if\n"
-"                              --basic-count=yes)  [main]\n"
+           ""
    );
 }
 
@@ -214,163 +205,6 @@ static void lk_print_debug_usage(void)
 "    (none)\n"
    );
 }
-
-/*------------------------------------------------------------*/
-/*--- Stuff for --basic-counts                             ---*/
-/*------------------------------------------------------------*/
-
-/* Nb: use ULongs because the numbers can get very big */
-static ULong n_func_calls    = 0;
-static ULong n_SBs_entered   = 0;
-static ULong n_SBs_completed = 0;
-static ULong n_IRStmts       = 0;
-static ULong n_guest_instrs  = 0;
-static ULong n_Jccs          = 0;
-static ULong n_Jccs_untaken  = 0;
-static ULong n_IJccs         = 0;
-static ULong n_IJccs_untaken = 0;
-
-static void add_one_func_call(void)
-{
-   n_func_calls++;
-}
-
-static void add_one_SB_entered(void)
-{
-   n_SBs_entered++;
-}
-
-static void add_one_SB_completed(void)
-{
-   n_SBs_completed++;
-}
-
-static void add_one_IRStmt(void)
-{
-   n_IRStmts++;
-}
-
-static void add_one_guest_instr(void)
-{
-   n_guest_instrs++;
-}
-
-static void add_one_Jcc(void)
-{
-   n_Jccs++;
-}
-
-static void add_one_Jcc_untaken(void)
-{
-   n_Jccs_untaken++;
-}
-
-static void add_one_inverted_Jcc(void)
-{
-   n_IJccs++;
-}
-
-static void add_one_inverted_Jcc_untaken(void)
-{
-   n_IJccs_untaken++;
-}
-
-/*------------------------------------------------------------*/
-/*--- Stuff for --detailed-counts                          ---*/
-/*------------------------------------------------------------*/
-
-/* --- Operations --- */
-
-typedef enum { OpLoad=0, OpStore=1, OpAlu=2 } Op;
-
-#define N_OPS 3
-
-
-/* --- Types --- */
-
-#define N_TYPES 11
-
-static Int type2index ( IRType ty )
-{
-   switch (ty) {
-      case Ity_I1:      return 0;
-      case Ity_I8:      return 1;
-      case Ity_I16:     return 2;
-      case Ity_I32:     return 3;
-      case Ity_I64:     return 4;
-      case Ity_I128:    return 5;
-      case Ity_F32:     return 6;
-      case Ity_F64:     return 7;
-      case Ity_F128:    return 8;
-      case Ity_V128:    return 9;
-      case Ity_V256:    return 10;
-      default: tl_assert(0);
-   }
-}
-
-static HChar* nameOfTypeIndex ( Int i )
-{
-   switch (i) {
-      case 0: return "I1";   break;
-      case 1: return "I8";   break;
-      case 2: return "I16";  break;
-      case 3: return "I32";  break;
-      case 4: return "I64";  break;
-      case 5: return "I128"; break;
-      case 6: return "F32";  break;
-      case 7: return "F64";  break;
-      case 8: return "F128";  break;
-      case 9: return "V128"; break;
-      case 10: return "V256"; break;
-      default: tl_assert(0);
-   }
-}
-
-
-/* --- Counts --- */
-
-static ULong detailCounts[N_OPS][N_TYPES];
-
-/* The helper that is called from the instrumented code. */
-static VG_REGPARM(1)
-void increment_detail(ULong* detail)
-{
-   (*detail)++;
-}
-
-/* A helper that adds the instrumentation for a detail. */
-static void instrument_detail(IRSB* sb, Op op, IRType type)
-{
-   IRDirty* di;
-   IRExpr** argv;
-   const UInt typeIx = type2index(type);
-
-   tl_assert(op < N_OPS);
-   tl_assert(typeIx < N_TYPES);
-
-   argv = mkIRExprVec_1( mkIRExpr_HWord( (HWord)&detailCounts[op][typeIx] ) );
-   di = unsafeIRDirty_0_N( 1, "increment_detail",
-                              VG_(fnptr_to_fnentry)( &increment_detail ), 
-                              argv);
-   addStmtToIRSB( sb, IRStmt_Dirty(di) );
-}
-
-/* Summarize and print the details. */
-static void print_details ( void )
-{
-   Int typeIx;
-   VG_(umsg)("   Type        Loads       Stores       AluOps\n");
-   VG_(umsg)("   -------------------------------------------\n");
-   for (typeIx = 0; typeIx < N_TYPES; typeIx++) {
-      VG_(umsg)("   %4s %'12llu %'12llu %'12llu\n",
-                nameOfTypeIndex( typeIx ),
-                detailCounts[OpLoad ][typeIx],
-                detailCounts[OpStore][typeIx],
-                detailCounts[OpAlu  ][typeIx]
-      );
-   }
-}
-
 
 /*------------------------------------------------------------*/
 /*--- Stuff for --trace-mem                                ---*/
@@ -563,16 +397,6 @@ void addEvent_Dw ( IRSB* sb, IRAtom* daddr, Int dsize )
 
 
 /*------------------------------------------------------------*/
-/*--- Stuff for --trace-superblocks                        ---*/
-/*------------------------------------------------------------*/
-
-static void trace_superblock(Addr addr)
-{
-   VG_(printf)("SB %08lx\n", addr);
-}
-
-
-/*------------------------------------------------------------*/
 /*--- Basic tool functions                                 ---*/
 /*------------------------------------------------------------*/
 
@@ -587,15 +411,9 @@ IRSB* lk_instrument ( VgCallbackClosure* closure,
                       VexGuestExtents* vge,
                       IRType gWordTy, IRType hWordTy )
 {
-   IRDirty*   di;
    Int        i;
    IRSB*      sbOut;
-   Char       fnname[100];
-   IRType     type;
    IRTypeEnv* tyenv = sbIn->tyenv;
-   Addr       iaddr = 0, dst;
-   UInt       ilen = 0;
-   Bool       condition_inverted = False;
 
    if (gWordTy != hWordTy) {
       /* We don't currently support this case. */
