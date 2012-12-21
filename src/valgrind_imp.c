@@ -1,6 +1,7 @@
-#include "imp.h"
 #include <stdio.h>
 #include <stdint.h>
+#include <stdlib.h>
+#include "imp.h"
 
 #define STORED_MAGIC 0x12345678
 #define CONST_MAGIC "Valgrind command"
@@ -35,28 +36,31 @@ void ct_valgrind_init(int num_threads) {
 void ct_valgrind_fini(void) {
 }
 
+int* ct_rand_perm(int n);
 
 void ct_valgrind_for_loop(int n, ct_ind_func f, void* context) {
     int i;
+    int* perm = ct_rand_perm(n);
     ct_valgrind_cmd("begin_for");
 
-    /* FIXME: we ought to have index randomization for proper coverage */
     for(i=0; i<n; ++i) {
+        int ind = perm[i];
         /* thread ID != index because of thread-local storage
            [and because of the ID range being smaller... but that's another matter.] */
-        ct_valgrind_int(4, i%255); /* there are 255 IDs (0 is reserved;
+        ct_valgrind_int(4, ind%255); /* there are 255 IDs (0 is reserved;
                                       1 is added by Valgrind and subtracted back in messages). */
         ct_valgrind_cmd("thrd");
 
-        ct_valgrind_int(4, i);
+        ct_valgrind_int(4, ind);
         ct_valgrind_cmd("iter");
 
-        f(i, context);
+        f(ind, context);
 
-        ct_valgrind_int(4, i);
+        ct_valgrind_int(4, ind);
         ct_valgrind_cmd("done");
     }
     ct_valgrind_cmd("end_for");
+    free(perm);
 }
 
 /* "volatile" for portable inlining prevention (instead of __attribute__((noinline))) */

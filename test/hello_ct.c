@@ -3,7 +3,6 @@
 #include "checkedthreads.h"
 
 #define N 100
-#define THREADS 4
 #define SCALE 3
 
 void index_callback(int index, void* context) {
@@ -36,7 +35,7 @@ void print_and_check_results(int array[]) {
 int main() {
     int array[N]={0};
 
-    ct_init(THREADS, 0);
+    ct_init(0);
     ct_for(N, index_callback, array);
     print_and_check_results(array);
     ct_fini();
