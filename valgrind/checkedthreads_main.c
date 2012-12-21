@@ -187,16 +187,21 @@
 /* Command line options controlling instrumentation kinds, as described at
  * the top of this file. */
 static Bool clo_trace_mem       = True;
+static Bool clo_print_commands  = False;
 
 static Bool lk_process_cmd_line_option(Char* arg)
 {
+   if VG_BOOL_CLO(arg, "--print-commands", clo_print_commands) {}
+   else
+      return False;
    return True;
 }
 
 static void lk_print_usage(void)
 {  
    VG_(printf)(
-           ""
+"    --print-commands=no|yes   print commands issued by the checkedtheads\n"
+"                              runtime [no]\n"
    );
 }
 
@@ -297,16 +302,16 @@ static void ct_process_command(ct_cmd* cmd)
         return;
     }
     if(ct_str_is(cmd->payload, "begin_for")) {
-        VG_(printf)("begin_for\n");
+        if(clo_print_commands) VG_(printf)("begin_for\n");
     }
     else if(ct_str_is(cmd->payload, "end_for")) {
-        VG_(printf)("end_for\n");
+        if(clo_print_commands) VG_(printf)("end_for\n");
     }
     else if(ct_str_is(cmd->payload, "iter")) {
-        VG_(printf)("iter %d\n", ct_cmd_int(cmd, 4));
+        if(clo_print_commands) VG_(printf)("iter %d\n", ct_cmd_int(cmd, 4));
     }
     else if(ct_str_is(cmd->payload, "done")) {
-        VG_(printf)("done %d\n", ct_cmd_int(cmd, 4));
+        if(clo_print_commands) VG_(printf)("done %d\n", ct_cmd_int(cmd, 4));
     }
 }
 
