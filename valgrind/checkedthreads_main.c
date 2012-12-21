@@ -1,13 +1,13 @@
 
 /*--------------------------------------------------------------------*/
-/*--- An example Valgrind tool.                          lk_main.c ---*/
+/*--- A checkedthreads data race detector.   checkedthreads_main.c ---*/
 /*--------------------------------------------------------------------*/
 
 /*
-   This file is part of Lackey, an example Valgrind tool that does
+   This file is based on Lackey, an example Valgrind tool that does
    some simple program measurement and tracing.
 
-   Copyright (C) 2002-2012 Nicholas Nethercote
+   Lackey is Copyright (C) 2002-2012 Nicholas Nethercote
       njn@valgrind.org
 
    This program is free software; you can redistribute it and/or
@@ -27,6 +27,7 @@
 
    The GNU General Public License is contained in the file COPYING.
 */
+
 
 // This tool shows how to do some basic instrumentation.
 //
@@ -184,28 +185,14 @@
 
 /* Command line options controlling instrumentation kinds, as described at
  * the top of this file. */
-static Bool clo_basic_counts    = True;
-static Bool clo_detailed_counts = False;
 static Bool clo_trace_mem       = False;
-static Bool clo_trace_sbs       = False;
-
-/* The name of the function of which the number of calls (under
- * --basic-counts=yes) is to be counted, with default. Override with command
- * line option --fnname. */
-static Char* clo_fnname = "main";
 
 static Bool lk_process_cmd_line_option(Char* arg)
 {
-   if VG_STR_CLO(arg, "--fnname", clo_fnname) {}
-   else if VG_BOOL_CLO(arg, "--basic-counts",      clo_basic_counts) {}
-   else if VG_BOOL_CLO(arg, "--detailed-counts",   clo_detailed_counts) {}
-   else if VG_BOOL_CLO(arg, "--trace-mem",         clo_trace_mem) {}
-   else if VG_BOOL_CLO(arg, "--trace-superblocks", clo_trace_sbs) {}
+   if VG_BOOL_CLO(arg, "--trace-mem",         clo_trace_mem) {}
    else
       return False;
    
-   tl_assert(clo_fnname);
-   tl_assert(clo_fnname[0]);
    return True;
 }
 
@@ -591,13 +578,6 @@ static void trace_superblock(Addr addr)
 
 static void lk_post_clo_init(void)
 {
-   Int op, tyIx;
-
-   if (clo_detailed_counts) {
-      for (op = 0; op < N_OPS; op++)
-         for (tyIx = 0; tyIx < N_TYPES; tyIx++)
-            detailCounts[op][tyIx] = 0;
-   }
 }
 
 static
@@ -632,24 +612,6 @@ IRSB* lk_instrument ( VgCallbackClosure* closure,
       i++;
    }
 
-   if (clo_basic_counts) {
-      /* Count this superblock. */
-      di = unsafeIRDirty_0_N( 0, "add_one_SB_entered", 
-                                 VG_(fnptr_to_fnentry)( &add_one_SB_entered ),
-                                 mkIRExprVec_0() );
-      addStmtToIRSB( sbOut, IRStmt_Dirty(di) );
-   }
-
-   if (clo_trace_sbs) {
-      /* Print this superblock's address. */
-      di = unsafeIRDirty_0_N( 
-              0, "trace_superblock", 
-              VG_(fnptr_to_fnentry)( &trace_superblock ),
-              mkIRExprVec_1( mkIRExpr_HWord( vge->base[0] ) ) 
-           );
-      addStmtToIRSB( sbOut, IRStmt_Dirty(di) );
-   }
-
    if (clo_trace_mem) {
       events_used = 0;
    }
@@ -658,14 +620,6 @@ IRSB* lk_instrument ( VgCallbackClosure* closure,
       IRStmt* st = sbIn->stmts[i];
       if (!st || st->tag == Ist_NoOp) continue;
 
-      if (clo_basic_counts) {
-         /* Count one VEX statement. */
-         di = unsafeIRDirty_0_N( 0, "add_one_IRStmt", 
-                                    VG_(fnptr_to_fnentry)( &add_one_IRStmt ), 
-                                    mkIRExprVec_0() );
-         addStmtToIRSB( sbOut, IRStmt_Dirty(di) );
-      }
-      
       switch (st->tag) {
          case Ist_NoOp:
          case Ist_AbiHint:
@@ -676,41 +630,6 @@ IRSB* lk_instrument ( VgCallbackClosure* closure,
             break;
 
          case Ist_IMark:
-            if (clo_basic_counts) {
-               /* Needed to be able to check for inverted condition in Ist_Exit */
-               iaddr = st->Ist.IMark.addr;
-               ilen  = st->Ist.IMark.len;
-
-               /* Count guest instruction. */
-               di = unsafeIRDirty_0_N( 0, "add_one_guest_instr",
-                                          VG_(fnptr_to_fnentry)( &add_one_guest_instr ), 
-                                          mkIRExprVec_0() );
-               addStmtToIRSB( sbOut, IRStmt_Dirty(di) );
-
-               /* An unconditional branch to a known destination in the
-                * guest's instructions can be represented, in the IRSB to
-                * instrument, by the VEX statements that are the
-                * translation of that known destination. This feature is
-                * called 'SB chasing' and can be influenced by command
-                * line option --vex-guest-chase-thresh.
-                *
-                * To get an accurate count of the calls to a specific
-                * function, taking SB chasing into account, we need to
-                * check for each guest instruction (Ist_IMark) if it is
-                * the entry point of a function.
-                */
-               tl_assert(clo_fnname);
-               tl_assert(clo_fnname[0]);
-               if (VG_(get_fnname_if_entry)(st->Ist.IMark.addr, 
-                                            fnname, sizeof(fnname))
-                   && 0 == VG_(strcmp)(fnname, clo_fnname)) {
-                  di = unsafeIRDirty_0_N( 
-                          0, "add_one_func_call", 
-                             VG_(fnptr_to_fnentry)( &add_one_func_call ), 
-                             mkIRExprVec_0() );
-                  addStmtToIRSB( sbOut, IRStmt_Dirty(di) );
-               }
-            }
             if (clo_trace_mem) {
                // WARNING: do not remove this function call, even if you
                // aren't interested in instruction reads.  See the comment
@@ -730,25 +649,6 @@ IRSB* lk_instrument ( VgCallbackClosure* closure,
                                sizeofIRType(data->Iex.Load.ty) );
                }
             }
-            if (clo_detailed_counts) {
-               IRExpr* expr = st->Ist.WrTmp.data;
-               type = typeOfIRExpr(sbOut->tyenv, expr);
-               tl_assert(type != Ity_INVALID);
-               switch (expr->tag) {
-                  case Iex_Load:
-                     instrument_detail( sbOut, OpLoad, type );
-                     break;
-                  case Iex_Unop:
-                  case Iex_Binop:
-                  case Iex_Triop:
-                  case Iex_Qop:
-                  case Iex_Mux0X:
-                     instrument_detail( sbOut, OpAlu, type );
-                     break;
-                  default:
-                     break;
-               }
-            }
             addStmtToIRSB( sbOut, st );
             break;
 
@@ -758,32 +658,10 @@ IRSB* lk_instrument ( VgCallbackClosure* closure,
                addEvent_Dw( sbOut, st->Ist.Store.addr,
                             sizeofIRType(typeOfIRExpr(tyenv, data)) );
             }
-            if (clo_detailed_counts) {
-               type = typeOfIRExpr(sbOut->tyenv, st->Ist.Store.data);
-               tl_assert(type != Ity_INVALID);
-               instrument_detail( sbOut, OpStore, type );
-            }
             addStmtToIRSB( sbOut, st );
             break;
 
          case Ist_Dirty: {
-            if (clo_trace_mem) {
-               Int      dsize;
-               IRDirty* d = st->Ist.Dirty.details;
-               if (d->mFx != Ifx_None) {
-                  // This dirty helper accesses memory.  Collect the details.
-                  tl_assert(d->mAddr != NULL);
-                  tl_assert(d->mSize != 0);
-                  dsize = d->mSize;
-                  if (d->mFx == Ifx_Read || d->mFx == Ifx_Modify)
-                     addEvent_Dr( sbOut, d->mAddr, dsize );
-                  if (d->mFx == Ifx_Write || d->mFx == Ifx_Modify)
-                     addEvent_Dw( sbOut, d->mAddr, dsize );
-               } else {
-                  tl_assert(d->mAddr == NULL);
-                  tl_assert(d->mSize == 0);
-               }
-            }
             addStmtToIRSB( sbOut, st );
             break;
          }
@@ -807,14 +685,6 @@ IRSB* lk_instrument ( VgCallbackClosure* closure,
                addEvent_Dr( sbOut, cas->addr, dataSize );
                addEvent_Dw( sbOut, cas->addr, dataSize );
             }
-            if (clo_detailed_counts) {
-               instrument_detail( sbOut, OpLoad, dataTy );
-               if (cas->dataHi != NULL) /* dcas */
-                  instrument_detail( sbOut, OpLoad, dataTy );
-               instrument_detail( sbOut, OpStore, dataTy );
-               if (cas->dataHi != NULL) /* dcas */
-                  instrument_detail( sbOut, OpStore, dataTy );
-            }
             addStmtToIRSB( sbOut, st );
             break;
          }
@@ -827,77 +697,29 @@ IRSB* lk_instrument ( VgCallbackClosure* closure,
                if (clo_trace_mem)
                   addEvent_Dr( sbOut, st->Ist.LLSC.addr,
                                       sizeofIRType(dataTy) );
-               if (clo_detailed_counts)
-                  instrument_detail( sbOut, OpLoad, dataTy );
             } else {
                /* SC */
                dataTy = typeOfIRExpr(tyenv, st->Ist.LLSC.storedata);
                if (clo_trace_mem)
                   addEvent_Dw( sbOut, st->Ist.LLSC.addr,
                                       sizeofIRType(dataTy) );
-               if (clo_detailed_counts)
-                  instrument_detail( sbOut, OpStore, dataTy );
             }
             addStmtToIRSB( sbOut, st );
             break;
          }
 
          case Ist_Exit:
-            if (clo_basic_counts) {
-               // The condition of a branch was inverted by VEX if a taken
-               // branch is in fact a fall trough according to client address
-               tl_assert(iaddr != 0);
-               dst = (sizeof(Addr) == 4) ? st->Ist.Exit.dst->Ico.U32 :
-                                           st->Ist.Exit.dst->Ico.U64;
-               condition_inverted = (dst == iaddr + ilen);
-
-               /* Count Jcc */
-               if (!condition_inverted)
-                  di = unsafeIRDirty_0_N( 0, "add_one_Jcc", 
-                                          VG_(fnptr_to_fnentry)( &add_one_Jcc ), 
-                                          mkIRExprVec_0() );
-               else
-                  di = unsafeIRDirty_0_N( 0, "add_one_inverted_Jcc",
-                                          VG_(fnptr_to_fnentry)(
-                                             &add_one_inverted_Jcc ),
-                                          mkIRExprVec_0() );
-
-               addStmtToIRSB( sbOut, IRStmt_Dirty(di) );
-            }
             if (clo_trace_mem) {
                flushEvents(sbOut);
             }
 
             addStmtToIRSB( sbOut, st );      // Original statement
 
-            if (clo_basic_counts) {
-               /* Count non-taken Jcc */
-               if (!condition_inverted)
-                  di = unsafeIRDirty_0_N( 0, "add_one_Jcc_untaken", 
-                                          VG_(fnptr_to_fnentry)(
-                                             &add_one_Jcc_untaken ),
-                                          mkIRExprVec_0() );
-               else
-                  di = unsafeIRDirty_0_N( 0, "add_one_inverted_Jcc_untaken",
-                                          VG_(fnptr_to_fnentry)(
-                                             &add_one_inverted_Jcc_untaken ),
-                                          mkIRExprVec_0() );
-
-               addStmtToIRSB( sbOut, IRStmt_Dirty(di) );
-            }
             break;
 
          default:
             tl_assert(0);
       }
-   }
-
-   if (clo_basic_counts) {
-      /* Count this basic block. */
-      di = unsafeIRDirty_0_N( 0, "add_one_SB_completed", 
-                                 VG_(fnptr_to_fnentry)( &add_one_SB_completed ),
-                                 mkIRExprVec_0() );
-      addStmtToIRSB( sbOut, IRStmt_Dirty(di) );
    }
 
    if (clo_trace_mem) {
@@ -910,66 +732,15 @@ IRSB* lk_instrument ( VgCallbackClosure* closure,
 
 static void lk_fini(Int exitcode)
 {
-   char percentify_buf[5]; /* Two digits, '%' and 0. */
-   const int percentify_size = sizeof(percentify_buf) - 1;
-   const int percentify_decs = 0;
-   
-   tl_assert(clo_fnname);
-   tl_assert(clo_fnname[0]);
-
-   if (clo_basic_counts) {
-      ULong total_Jccs = n_Jccs + n_IJccs;
-      ULong taken_Jccs = (n_Jccs - n_Jccs_untaken) + n_IJccs_untaken;
-
-      VG_(umsg)("Counted %'llu call%s to %s()\n",
-                n_func_calls, ( n_func_calls==1 ? "" : "s" ), clo_fnname);
-
-      VG_(umsg)("\n");
-      VG_(umsg)("Jccs:\n");
-      VG_(umsg)("  total:         %'llu\n", total_Jccs);
-      VG_(percentify)(taken_Jccs, (total_Jccs ? total_Jccs : 1),
-         percentify_decs, percentify_size, percentify_buf);
-      VG_(umsg)("  taken:         %'llu (%s)\n",
-         taken_Jccs, percentify_buf);
-      
-      VG_(umsg)("\n");
-      VG_(umsg)("Executed:\n");
-      VG_(umsg)("  SBs entered:   %'llu\n", n_SBs_entered);
-      VG_(umsg)("  SBs completed: %'llu\n", n_SBs_completed);
-      VG_(umsg)("  guest instrs:  %'llu\n", n_guest_instrs);
-      VG_(umsg)("  IRStmts:       %'llu\n", n_IRStmts);
-      
-      VG_(umsg)("\n");
-      VG_(umsg)("Ratios:\n");
-      tl_assert(n_SBs_entered); // Paranoia time.
-      VG_(umsg)("  guest instrs : SB entered  = %'llu : 10\n",
-         10 * n_guest_instrs / n_SBs_entered);
-      VG_(umsg)("       IRStmts : SB entered  = %'llu : 10\n",
-         10 * n_IRStmts / n_SBs_entered);
-      tl_assert(n_guest_instrs); // Paranoia time.
-      VG_(umsg)("       IRStmts : guest instr = %'llu : 10\n",
-         10 * n_IRStmts / n_guest_instrs);
-   }
-
-   if (clo_detailed_counts) {
-      VG_(umsg)("\n");
-      VG_(umsg)("IR-level counts by type:\n");
-      print_details();
-   }
-
-   if (clo_basic_counts) {
-      VG_(umsg)("\n");
-      VG_(umsg)("Exit code:       %d\n", exitcode);
-   }
 }
 
 static void lk_pre_clo_init(void)
 {
-   VG_(details_name)            ("Lackey - rebuilt");
+   VG_(details_name)            ("checkedthreads");
    VG_(details_version)         (NULL);
-   VG_(details_description)     ("an example Valgrind tool - rebuilt");
+   VG_(details_description)     ("a data race detector for the checkedthreads framework");
    VG_(details_copyright_author)(
-      "Copyright (C) 2002-2012, and GNU GPL'd, by Nicholas Nethercote.");
+      "Copyright (C) 2012 by Yossi Kreinin (Yossi.Kreinin@gmail.com)");
    VG_(details_bug_reports_to)  (VG_BUGS_TO);
    VG_(details_avg_translation_sizeB) ( 200 );
 
@@ -984,5 +755,5 @@ static void lk_pre_clo_init(void)
 VG_DETERMINE_INTERFACE_VERSION(lk_pre_clo_init)
 
 /*--------------------------------------------------------------------*/
-/*--- end                                                lk_main.c ---*/
+/*--- end                                    checkedthreads_main.c ---*/
 /*--------------------------------------------------------------------*/
