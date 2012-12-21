@@ -70,4 +70,5 @@ Coding style
 * Everything prefixed with ct_ (ctx_ for C++ identifiers), except for struct members.
 * Globals prefixed with g_ct/g_ctx; no static variables (all are extern).
 * Indentation: 1TBS, 4 spaces per level, no hard tabs.
-* Everything is lowercase, underscore_separated.
+* Everything is lowercase, underscore_separated. Macros mostly UPPERCASE.
+* Style isn't that important.

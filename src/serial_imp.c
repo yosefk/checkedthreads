@@ -15,6 +15,7 @@ void ct_serial_for(int n, ct_ind_func f, void* context) {
 }
 
 ct_imp g_ct_serial_imp = {
+    "serial",
     &ct_serial_init,
     &ct_serial_fini,
     &ct_serial_for,

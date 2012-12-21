@@ -1,7 +1,7 @@
 #!/usr/bin/python
 
 dirs = 'obj lib bin'.split()
-srcs = 'ct_api.c ctx_api.cpp serial.c pthreads.c'.split()
+srcs = 'ct_api.c ctx_api.cpp serial_imp.c pthreads_imp.c valgrind_imp.c'.split()
 lib = 'libcheckedthreads.so'
 tests = 'hello_ct.c'.split()
 

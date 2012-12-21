@@ -178,6 +178,7 @@
 #include "pub_tool_libcbase.h"
 #include "pub_tool_options.h"
 #include "pub_tool_machine.h"     // VG_(fnptr_to_fnentry)
+#include <stdint.h>
 
 /*------------------------------------------------------------*/
 /*--- Command line options                                 ---*/
@@ -263,20 +264,70 @@ typedef
 static Event events[N_EVENTS];
 static Int   events_used = 0;
 
+#define MAGIC 0x12345678
+#define CONST_MAGIC "Valgrind command"
+#define MAX_CMD 128
+
+typedef struct {
+    volatile uint32_t stored_magic;
+    const char const_magic[16];
+    volatile char payload[MAX_CMD];
+} ct_cmd;
+
+static Bool ct_str_is(volatile const char* variable, const char* constant)
+{
+    int i=0;
+    while(constant[i]) {
+        if(variable[i] != constant[i]) {
+            return False;
+        }
+        ++i;
+    }
+    return True;
+}
+
+static Int ct_cmd_int(ct_cmd* cmd, int oft)
+{
+    return *(volatile int32_t*)&cmd->payload[oft];
+}
+
+static void ct_process_command(ct_cmd* cmd)
+{
+    if(!ct_str_is(cmd->const_magic, CONST_MAGIC)) {
+        return;
+    }
+    if(ct_str_is(cmd->payload, "begin_for")) {
+        VG_(printf)("begin_for\n");
+    }
+    else if(ct_str_is(cmd->payload, "end_for")) {
+        VG_(printf)("end_for\n");
+    }
+    else if(ct_str_is(cmd->payload, "iter")) {
+        VG_(printf)("iter %d\n", ct_cmd_int(cmd, 4));
+    }
+    else if(ct_str_is(cmd->payload, "done")) {
+        VG_(printf)("done %d\n", ct_cmd_int(cmd, 4));
+    }
+}
 
 static VG_REGPARM(2) void trace_load(Addr addr, SizeT size)
 {
-   VG_(printf)(" L %08lx,%lu\n", addr, size);
 }
 
 static VG_REGPARM(2) void trace_store(Addr addr, SizeT size)
 {
-   VG_(printf)(" S %08lx,%lu\n", addr, size);
+   ct_cmd* p = (ct_cmd*)addr;
+   if(p->stored_magic == MAGIC) {
+       ct_process_command(p);
+   }
 }
 
 static VG_REGPARM(2) void trace_modify(Addr addr, SizeT size)
 {
-   VG_(printf)(" M %08lx,%lu\n", addr, size);
+   ct_cmd* p = (ct_cmd*)addr;
+   if(p->stored_magic == MAGIC) {
+       ct_process_command(p);
+   }
 }
 
 

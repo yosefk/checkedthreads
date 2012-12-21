@@ -2,3 +2,4 @@ obj/*
 lib/*
 bin/*
 .*.swp
+core
