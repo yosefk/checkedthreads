@@ -3,6 +3,22 @@ checkedthreads
 
 checkedthreads: parallel, simple, safe. APIs, a load-balancing scheduler, and a Valgrind-based checker
 
+Nice things
+===========
+
+* Verification using debug schedulers (fast) and Valgrind-based instrumentation (thorough).
+  Find every bug that could *ever* manifest on the given inputs!
+* *Integrates* with OpenMP, TBB and pthreads ("integrates" is better than than just
+  "can run on top of" - not only that, but it works nicely alongside code
+  using OpenMP and TBB directly; for example, alongside GNU's parallel STL.)
+* Easy to port: no compiler extensions, small C89 code (the tiny C++11 bit is optional),
+  very few required from the underlying platform (not even context switching).
+
+Theoretically, another nice thing is simplicity and small size of interface
+and implementation. However, time is known to cure both. What *should* remain true
+is safety: only such features should be added with which is remains possible
+to thoroughly verify programs.
+
 API
 ===
 

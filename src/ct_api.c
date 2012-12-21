@@ -4,11 +4,13 @@
 #include "imp.h"
 
 extern ct_imp g_ct_serial_imp;
+extern ct_imp g_ct_openmp_imp;
 extern ct_imp g_ct_shuffle_imp;
 extern ct_imp g_ct_valgrind_imp;
 
 ct_imp* g_ct_imps[] = {
     &g_ct_serial_imp,
+    &g_ct_openmp_imp,
     &g_ct_shuffle_imp,
     &g_ct_valgrind_imp,
     0
@@ -45,7 +47,7 @@ ct_imp* ct_sched(const char* name) {
 
 void ct_init(const ct_env_var* env) {
     int num_threads = atoi(ct_getenv(env, "CT_THREADS", "0"));
-    const char* default_sched = "serial"; /* FIXME: should be "balance" */
+    const char* default_sched = "openmp";
     const char* sched = ct_getenv(env, "CT_SCHED", default_sched);
     g_ct_pimpl = ct_sched(sched);
     if(!g_ct_pimpl) {

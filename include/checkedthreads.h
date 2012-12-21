@@ -1,6 +1,8 @@
 #ifndef CHECKEDTHREADS_H_
 #define CHECKEDTHREADS_H_
 
+#include "checkedthreads_config.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -16,7 +18,7 @@ typedef struct {
 
    environment variables:
 
-   $CT_SCHED: serial, shuffle, valgrind, balance(default).
+   $CT_SCHED: serial, shuffle, valgrind, openmp(default).
    $CT_THREADS: number of threads, including main (TODO: 0 should auto-config.)
    $CT_VERBOSE: 2(print indexes), 1(print loops), 0(silent-default).
  */

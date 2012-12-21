@@ -14,6 +14,4 @@ typedef struct {
     ct_imp_for_func imp_for;
 } ct_imp;
 
-extern int g_ct_verbose;
-
 #endif /* CT_IMP_H_ */

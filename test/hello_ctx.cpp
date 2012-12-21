@@ -2,28 +2,8 @@
 #include <stdlib.h>
 #include "checkedthreads.h"
 
-#if 0
-#include <unistd.h>
-#include <omp.h>
-#endif
-
 #define N 100
 #define SCALE 3
-
-void index_callback(int index, void* context) {
-    int* array = (int*)context;
-    array[index] = index*SCALE;
-#if 0
-    if(index==1 || index==2) {
-        sleep(5);
-        printf("slept %d\n",index);
-    }
-    printf("omp_id: %d i=%d\n", omp_get_thread_num(), index);
-#endif
-    if(index==55) {
-        array[index+1] = index*SCALE;
-    }
-}
 
 void print_and_check_results(int array[]) {
     int i;
@@ -48,7 +28,12 @@ int main() {
     int array[N]={0};
 
     ct_init(0);
-    ct_for(N, index_callback, array);
+    ctx_for(N, [&](int index) {
+        array[index] = index*SCALE;
+        if(index==55) {
+            array[index+1] = index*SCALE;
+        }
+    });
     print_and_check_results(array);
     ct_fini();
     return 0;
