@@ -2,7 +2,7 @@
 
 dirs = 'obj lib bin'.split()
 srcsc = 'ct_api.c serial_imp.c pthreads_imp.c openmp_imp.c shuffle_imp.c valgrind_imp.c'.split()
-srcsxx = 'ctx_api.cpp'.split()
+srcsxx = 'ctx_api.cpp tbb_imp.cpp'.split()
 libc = 'checkedthreads'
 libxx = 'checkedthreads++'
 tests = 'hello_ct.c hello_ctx.cpp'.split()
@@ -17,7 +17,7 @@ verbose = int(os.getenv('VERBOSE',0))
 def build():
     for dir in dirs:
         mkdir(dir)
-    for lib,srcs,more in ((libc,srcsc,[]),(libxx,srcsxx,srcsc)):
+    for lib,srcs,more in ((libc,srcsc+['tbb_stub.c'],[]),(libxx,srcsxx,srcsc)):
         print '\nbuilding','lib'+lib
         for src in srcs:
             compile(src)
@@ -73,7 +73,7 @@ def buildtest(test):
     src = 'test/'+test
     cc = compiler(test)
     lib = {'gcc':libc,'g++':libxx}[cc]
-    update('%s %s -o %s lib/lib%s.a -I include'%(cc,src,bin,lib),[bin],[src])
+    update('%s %s -o %s lib/lib%s.a -ltbb -I include'%(cc,src,bin,lib),[bin],[src])
 
 if __name__ == '__main__':
     build()

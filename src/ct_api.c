@@ -3,12 +3,14 @@
 #include <stdio.h>
 #include "imp.h"
 
+extern ct_imp g_ct_tbb_imp;
 extern ct_imp g_ct_serial_imp;
 extern ct_imp g_ct_openmp_imp;
 extern ct_imp g_ct_shuffle_imp;
 extern ct_imp g_ct_valgrind_imp;
 
 ct_imp* g_ct_imps[] = {
+    &g_ct_tbb_imp,
     &g_ct_serial_imp,
     &g_ct_openmp_imp,
     &g_ct_shuffle_imp,
