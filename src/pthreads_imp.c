@@ -2,12 +2,7 @@
 #include <pthread.h>
 #include <stdlib.h>
 #include "imp.h"
-
-/* handling of cond vars/signal/wait is as described here:
-http://stackoverflow.com/questions/2763714/why-do-pthreads-condition-variable-functions-require-a-mutex
-(in particular, the page discusses spurious wakeups and advises to have a
-"work available" flag to be checked after waiting for a cond var.)
-*/
+#include "atomic.h"
 
 typedef struct {
     pthread_cond_t cond;
@@ -17,17 +12,38 @@ typedef struct {
     volatile int num_initialized;
     int work_available;
     int terminate;
-    int n;
+    volatile int next_ind;
+    volatile int to_do;
+    volatile int n;
     ct_ind_func f;
     void* context;
 } ct_pthread_pool;
 
 ct_pthread_pool g_ct_pthread_pool = {
     PTHREAD_COND_INITIALIZER, PTHREAD_MUTEX_INITIALIZER,
-    0, 0, 0, 0, 0, 0, 0, 0
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0
 };
 
-volatile int g_fixme_done[2];
+/* keep yanking jobs (atomic next_ind++ to get next,
+   atomic to_do-- to report that it's done) while
+   there are jobs available (to_do != 0) */
+void ct_pthreads_yank_while_not_done(void) {
+    ct_pthread_pool* pool = &g_ct_pthread_pool;
+    int n = pool->n;
+    ct_ind_func f = pool->f;
+    void* context = pool->context;
+    while(pool->to_do) {
+        int next_ind = pool->next_ind;
+        if(next_ind < n) { /* we don't want to busily increment it
+                              when it exceeds n but we still wait for someone. */
+            next_ind = ATOMIC_FETCH_THEN_INCR(&pool->next_ind, 1);
+            if(next_ind < n) {
+                f(next_ind, context);
+                ATOMIC_FETCH_THEN_DERC(&pool->to_do, 1);
+            }
+        }
+    }
+}
 
 void* ct_pthreads_worker(void* arg) {
     int id = (int)(size_t)arg;
@@ -41,7 +57,8 @@ void* ct_pthreads_worker(void* arg) {
         pthread_cond_wait(&pool->cond, &pool->mutex);
         /* ...and locks it back before it returns. */
 
-        /* if !work_available, it's a spurious wakeup - simply wait again. */
+        /* if !work_available (and !terminate),
+           it's a spurious wakeup - simply wait again. */
         if(pool->work_available) {
             int i;
             int single_share = pool->n / pool->num_threads;
@@ -50,7 +67,9 @@ void* ct_pthreads_worker(void* arg) {
             for(i=single_share*id; i<single_share*(id+1); ++i) {
                 pool->f(i, pool->context);
             }
-            g_fixme_done[id] = 1;
+            /* the master also calls this, and so we all sync using the to_do
+               counter - when it reaches 0, we all quit ct_pthreads_yank_while_not_done() */
+            ct_pthreads_yank_while_not_done();
             /* lock the mutex back before waiting */
             pthread_mutex_lock(&pool->mutex);
         }
@@ -97,12 +116,13 @@ void ct_pthreads_fini(void) {
 void ct_pthreads_for(int n, ct_ind_func f, void* context) {
     ct_pthread_pool* pool = &g_ct_pthread_pool;
     pool->n = n;
+    pool->to_do = n;
+    pool->next_ind = 0;
     pool->f = f;
     pool->context = context;
     pool->work_available = 1;
     ct_pthreads_broadcast();
-    /* FIXME */
-    while(!g_fixme_done[0] || !g_fixme_done[1]);
+    ct_pthreads_yank_while_not_done();
     pool->work_available = 0;
 }
 
