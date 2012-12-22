@@ -8,6 +8,7 @@ extern ct_imp g_ct_serial_imp;
 extern ct_imp g_ct_openmp_imp;
 extern ct_imp g_ct_shuffle_imp;
 extern ct_imp g_ct_valgrind_imp;
+extern ct_imp g_ct_pthreads_imp;
 
 ct_imp* g_ct_imps[] = {
     &g_ct_tbb_imp,
@@ -15,6 +16,7 @@ ct_imp* g_ct_imps[] = {
     &g_ct_openmp_imp,
     &g_ct_shuffle_imp,
     &g_ct_valgrind_imp,
+    &g_ct_pthreads_imp,
     0
 };
 

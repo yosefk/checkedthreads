@@ -2,6 +2,11 @@
 #include <stdlib.h>
 #include "checkedthreads.h"
 
+#if 1
+#include <unistd.h>
+#include <omp.h>
+#endif
+
 #define N 100
 #define SCALE 3
 
@@ -30,6 +35,13 @@ int main() {
     ct_init(0);
     ctx_for(N, [&](int index) {
         array[index] = index*SCALE;
+#if 1
+        if(index==1 || index==2) {
+            sleep(5);
+            printf("slept %d\n",index);
+        }
+        printf("omp_id: %d i=%d\n", omp_get_thread_num(), index);
+#endif
         if(index==55) {
             array[index+1] = index*SCALE;
         }

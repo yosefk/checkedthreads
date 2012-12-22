@@ -18,9 +18,19 @@ typedef struct {
 
    environment variables:
 
-   $CT_SCHED: serial, shuffle, valgrind, openmp(default).
+   $CT_SCHED: serial, shuffle, valgrind, openmp(default), tbb.
    $CT_THREADS: number of threads, including main (TODO: 0 should auto-config.)
    $CT_VERBOSE: 2(print indexes), 1(print loops), 0(silent-default).
+
+   note that the parallel schedulers such as openmp and tbb currently
+   specify two things which are conceptually separate: the "threading platform"
+   (do we access threading using OpenMP or TBB interfaces?) and the scheduling
+   policy (do we partition indexes statically or dynamically?).
+
+   if we wish to support multiple policies in the future, we'll add a $CT_POLICY
+   or some such; currently it seems undesirable in the sense that changing
+   the policy is unlikely to improve the performance of programs written
+   by people who understood, and counted on, another policy.
  */
 void ct_init(const ct_env_var* env);
 void ct_fini(void);

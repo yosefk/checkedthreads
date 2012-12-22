@@ -50,7 +50,7 @@ def flags(compiler):
     return {
         'gcc':'-std=c89',
         'g++':'-std=c++0x', #TODO: configure
-    }[compiler] + ' -pedantic -Wall -Wextra -Werror -g -fopenmp'
+    }[compiler] + ' -pedantic -Wall -Wextra -Werror -g -fopenmp -pthread'
 
 def compiler(fname):
     ext = fname.split('.')[-1]
