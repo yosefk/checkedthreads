@@ -17,6 +17,15 @@ imperative programs; and they're right.
 But it doesn't have to be hard. This framework provides APIs for writing *easily testable*
 parallel programs - and tools for testing programs written using this API.
 
+When is this framework for me?
+==============================
+
+* When your programs are parallelized to gain speed. Currently, checkedthreads is not designed
+  to support inherently concurrent programs like those managing banks and websites.
+* When you have a serial program that you want to parallelize - or already
+  parallelized with OpenMP, TBB or raw threads; you can use checkedthreads alongside any of these.
+* 
+
 Nice things
 ===========
 
