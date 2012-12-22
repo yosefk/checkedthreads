@@ -1,27 +1,20 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include "checkedthreads.h"
-
-#if 0
 #include <unistd.h>
-#include <omp.h>
-#endif
 
 #define N 100
 #define SCALE 3
 
 void index_callback(int index, void* context) {
     int* array = (int*)context;
-    array[index] = index*SCALE;
-#if 0
+    array[index] += index*SCALE;
     if(index==1 || index==2) {
-        sleep(5);
-        printf("slept %d\n",index);
+        /* sleep(1); */
+        /* printf("slept at i=%d\n",index); */
     }
-    printf("omp_id: %d i=%d\n", omp_get_thread_num(), index);
-#endif
     if(index==55) {
-        array[index+1] = index*SCALE;
+        array[index+1] = 0;
     }
 }
 

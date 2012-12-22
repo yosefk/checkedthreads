@@ -64,11 +64,18 @@ void ct_init(const ct_env_var* env) {
     g_ct_verbose = atoi(ct_getenv(env, "CT_VERBOSE", "0"));
 
     g_ct_pimpl->imp_init(num_threads);
+
+    if(g_ct_verbose) {
+        printf("checkedthreads: initialized\n");
+    }
 }
 
 void ct_fini(void) {
     g_ct_pimpl->imp_fini();
     g_ct_pimpl = 0;
+    if(g_ct_verbose) {
+        printf("checkedthreads: finalized\n");
+    }
 }
 
 typedef struct {

@@ -2,6 +2,7 @@
 #include "imp.h"
 
 /* TODO: add a seed */
+/* TODO: use local state instead of rand()'s global state. */
 
 /* based on GNU std::random_shuffle */
 void ct_random_shuffle(int* p, int n) {

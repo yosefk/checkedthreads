@@ -97,7 +97,9 @@ to be a race.
 TODO
 ====
 
-PIC code support and a libcheckedthreads.so, possibly.
+PIC code support and a libcheckedthreads.so, possibly. Even "without shared libraries",
+we need to handle the .got.plt business because as long as you don't use -static, which
+you can't if you want valgrind to work, you're going to have these in standard libraries.
 
 Coding style
 ============

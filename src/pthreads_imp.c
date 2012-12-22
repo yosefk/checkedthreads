@@ -48,6 +48,10 @@ void ct_pthreads_yank_while_not_done(void) {
 void* ct_pthreads_worker(void* arg) {
     int id = (int)(size_t)arg;
     ct_pthread_pool* pool = &g_ct_pthread_pool;
+
+    (void)id; /* TODO: use this to implement a ct_curr_thread() function
+                 (thread-local storage doesn't require an ID number - there are pthread keys for that. */
+
     pthread_mutex_lock(&pool->mutex);
     ++pool->num_initialized; /* this signals the master that it should
                                 sync with us by locking and unlocking
@@ -60,13 +64,7 @@ void* ct_pthreads_worker(void* arg) {
         /* if !work_available (and !terminate),
            it's a spurious wakeup - simply wait again. */
         if(pool->work_available) {
-            int i;
-            int single_share = pool->n / pool->num_threads;
             pthread_mutex_unlock(&pool->mutex);
-            /* do the work; FIXME: yank indexes from a logical shared queue. */
-            for(i=single_share*id; i<single_share*(id+1); ++i) {
-                pool->f(i, pool->context);
-            }
             /* the master also calls this, and so we all sync using the to_do
                counter - when it reaches 0, we all quit ct_pthreads_yank_while_not_done() */
             ct_pthreads_yank_while_not_done();
@@ -91,6 +89,8 @@ void ct_pthreads_init(int num_threads) {
     int i;
     /* TODO: we should figure out #cores instead. */
     /* TODO: we might want a way to get the threads for the pool from the outside. */
+    /* TODO: what should num_threads mean - including the master or not? what
+       does it mean in TBB, OpenMP, etc.? */
     if(num_threads == 0) {
         printf("checkedthreads - WARNING: $CT_THREADS not set to non-zero value; using 2 pthreads.\n");
         num_threads = 2;
@@ -110,7 +110,9 @@ void ct_pthreads_init(int num_threads) {
 }
 
 void ct_pthreads_fini(void) {
-    /* TODO: terminate the threads */
+    ct_pthread_pool* pool = &g_ct_pthread_pool;
+    pool->terminate = 1;
+    ct_pthreads_broadcast();
 }
 
 void ct_pthreads_for(int n, ct_ind_func f, void* context) {
@@ -120,6 +122,7 @@ void ct_pthreads_for(int n, ct_ind_func f, void* context) {
     pool->next_ind = 0;
     pool->f = f;
     pool->context = context;
+
     pool->work_available = 1;
     ct_pthreads_broadcast();
     ct_pthreads_yank_while_not_done();
