@@ -3,6 +3,18 @@ checkedthreads
 
 checkedthreads: no race condition goes unnoticed! API, auto load balancing, Valgrind-based checking.
 
+What race conditions are found?
+===============================
+
+All of them! checkedthreads provides two verification methods:
+
+* *Fast verification* using a debug scheduler that changes the order of events.
+* *Thorough verification* using Valgrind-based instrumentation that monitors memory accesses
+  and flags accesses to data owned by another thread.
+
+There are more details below; the upshot is that very race condition that could *ever* manifest on your inputs
+will be found.
+
 Why another framework?
 ======================
 
@@ -24,23 +36,12 @@ When is this framework for me?
   to support inherently concurrent programs like those managing banks and websites.
 * When you have a serial program that you want to parallelize - or already
   parallelized with OpenMP, TBB or raw threads; you can use checkedthreads alongside any of these.
-* 
-
-Nice things
-===========
-
-* Verification using debug schedulers (fast) and Valgrind-based instrumentation (thorough).
-  Find every bug that could *ever* manifest on the given inputs!
-* *Integrates* with OpenMP, TBB and pthreads ("integrates" is better than than just
-  "can run on top of" - not only that, but it works nicely alongside code
-  using OpenMP and TBB directly; for example, alongside GNU's parallel STL.)
-* Easy to port: no compiler extensions, small C89 code (the tiny C++11 bit is optional),
-  very few required from the underlying platform (not even context switching).
-
-Theoretically, another nice thing is simplicity and small size of interface
-and implementation. However, time is known to cure both. What *should* remain true
-is safety: only such features should be added with which is remains possible
-to thoroughly verify programs.
+* When you're worried about race conditions. (This isn't always the case; perhaps the program
+  is small enough, or it's mostly serial, or the team is small enough and knows very well
+  what's going on. The "frightening" case is when you parallelize hairy, large, stateful programs.)
+* When you want to port to a "weird" platform. checkedthreads requires very little of the compiler
+  (C89) and of the OS (it doesn't even need context switching and it's easy to port to processors
+  with no OS at all). TBB, OpenMP, and even raw threads require more.
 
 API
 ===
