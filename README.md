@@ -3,6 +3,20 @@ checkedthreads
 
 checkedthreads: no race condition goes unnoticed! API, auto load balancing, Valgrind-based checking.
 
+Why another framework?
+======================
+
+In a nutshell: for computational code, raw threads have two problems - manual load balancing
+and race conditions. Automatic load balancing is handled nicely by existing frameworks
+such as TBB and OpenMP. AFAIK, automatic detection of race conditions is not. Verification
+is not the focus of current parallelism frameworks, flexibility and performance are.
+
+And yet everyone is talking about parallelism bugs, and how hard it is to debug concurrent,
+imperative programs; and they're right.
+
+But it doesn't have to be hard. This framework provides APIs for writing *easily testable*
+parallel programs - and tools for testing programs written using this API.
+
 Nice things
 ===========
 
