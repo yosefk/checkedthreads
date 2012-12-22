@@ -1,7 +1,7 @@
 checkedthreads
 ==============
 
-checkedthreads: parallel, simple, safe. APIs, a load-balancing scheduler, and a Valgrind-based checker
+checkedthreads: no race condition goes unnoticed! API, auto load balancing, Valgrind-based checking.
 
 Nice things
 ===========
