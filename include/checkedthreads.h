@@ -18,7 +18,7 @@ typedef struct {
 
    environment variables:
 
-   $CT_SCHED: serial, shuffle, valgrind, openmp(default), tbb.
+   $CT_SCHED: serial, shuffle, valgrind, openmp(default), tbb, pthreads.
    $CT_THREADS: number of threads, including main (TODO: 0 should auto-config.)
    $CT_VERBOSE: 2(print indexes), 1(print loops), 0(silent-default).
 

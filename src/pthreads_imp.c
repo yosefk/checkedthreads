@@ -86,6 +86,7 @@ void ct_pthreads_broadcast(void)
 
 void ct_pthreads_init(int num_threads) {
     ct_pthread_pool* pool = &g_ct_pthread_pool;
+    pthread_attr_t attr;
     int i;
     /* TODO: we should figure out #cores instead. */
     /* TODO: we might want a way to get the threads for the pool from the outside. */
@@ -99,20 +100,31 @@ void ct_pthreads_init(int num_threads) {
     pthread_mutex_init(&pool->mutex, 0);
     pool->threads = (pthread_t*)malloc(sizeof(pthread_t)*num_threads);
     pool->num_threads = num_threads;
+    /* For portability, explicitly create threads in a joinable state.
+       -- https://computing.llnl.gov/tutorials/pthreads/#ConditionVariables */
+    pthread_attr_init(&attr);
+    pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_JOINABLE);
     for(i=0; i<num_threads; ++i) {
-        pthread_create(&pool->threads[i], 0, ct_pthreads_worker, (void*)(size_t)i);
+        pthread_create(&pool->threads[i], &attr, ct_pthreads_worker, (void*)(size_t)i);
         /* wait for the spawned thread to lock the cond var mutex */
         while(pool->num_initialized == i);
         /* now make sure it /unlocked/ the mutex - that is, that it entered the wait */
         pthread_mutex_lock(&pool->mutex);
         pthread_mutex_unlock(&pool->mutex);
     }
+    pthread_attr_destroy(&attr);
 }
 
 void ct_pthreads_fini(void) {
     ct_pthread_pool* pool = &g_ct_pthread_pool;
+    int i;
     pool->terminate = 1;
     ct_pthreads_broadcast();
+    for(i=0; i<pool->num_threads; ++i) {
+        pthread_join(pool->threads[i], 0);
+    }
+    pthread_mutex_destroy(&pool->mutex);
+    pthread_cond_destroy(&pool->cond);
 }
 
 void ct_pthreads_for(int n, ct_ind_func f, void* context) {
