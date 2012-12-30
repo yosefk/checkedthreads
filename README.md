@@ -101,6 +101,10 @@ PIC code support and a libcheckedthreads.so, possibly. Even "without shared libr
 we need to handle the .got.plt business because as long as you don't use -static, which
 you can't if you want valgrind to work, you're going to have these in standard libraries.
 
+currently missing - thread-local storage and some lock-free primitives
+(a histogram, an unordered list). another big thing is automatic configuration
+and testing.
+
 Coding style
 ============
 

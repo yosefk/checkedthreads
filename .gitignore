@@ -3,3 +3,4 @@ lib/*
 bin/*
 .*.swp
 core
+include/checkedthreads_config.h
