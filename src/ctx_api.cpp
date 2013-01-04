@@ -13,7 +13,7 @@ void ctx_for(int n, const ctx_ind_func& f)
     ct_for(n, ctx_for_ind_func, (void*)&f);
 }
 
-void ctx_spawn_(ctx_task_node_* head)
+void ctx_invoke_(ctx_task_node_* head)
 {
     const int max_local_tasks = 128;
     ctx_task_func* local_tasks[max_local_tasks]; 

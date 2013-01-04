@@ -35,14 +35,14 @@ typedef struct {
 void ct_init(const ct_env_var* env);
 void ct_fini(void);
 
-/* spawn a set of tasks - make N async function calls */
+/* invoke a set of tasks - make N async function calls */
 typedef void (*ct_task_func)(void* arg);
 typedef struct {
     ct_task_func func;
     void* arg;
 } ct_task;
 /* a task with func==0 is the sentinel */
-void ct_spawn(const ct_task tasks[]);
+void ct_invoke(const ct_task tasks[]);
 
 /* N async function calls f(0) ... f(n-1) */
 typedef void (*ct_ind_func)(int ind, void* context);
@@ -59,25 +59,25 @@ void ct_for(int n, ct_ind_func f, void* context);
 typedef std::function<void(int)> ctx_ind_func;
 void ctx_for(int n, const ctx_ind_func& f);
 
-/* helpers for ctx_spawn... */
+/* helpers for ctx_invoke... */
 typedef std::function<void(void)> ctx_task_func;
 struct ctx_task_node_ {
     ctx_task_func* func;
     ctx_task_node_* next;
 };
-void ctx_spawn_(ctx_task_node_* head);
+void ctx_invoke_(ctx_task_node_* head);
 template<typename First, typename... Rest>
-void ctx_spawn_(ctx_task_node_* head, const First& first, Rest... rest) {
+void ctx_invoke_(ctx_task_node_* head, const First& first, Rest... rest) {
     ctx_task_func func(first);
     ctx_task_node_ new_head = { &func, head };
-    ctx_spawn_(&new_head, rest...);
+    ctx_invoke_(&new_head, rest...);
 }
-/* ...and ctx_spawn itself. */
+/* ...and ctx_invoke itself. */
 template<typename First, typename... Rest>
-void ctx_spawn(const First& first, Rest... rest) {
+void ctx_invoke(const First& first, Rest... rest) {
     ctx_task_func func(first);
     ctx_task_node_ head = { &func, 0 };
-    ctx_spawn_(&head, rest...);
+    ctx_invoke_(&head, rest...);
 }
 
 #endif /* CT_CXX11 */

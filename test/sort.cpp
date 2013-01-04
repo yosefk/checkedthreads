@@ -66,7 +66,7 @@ void m_sort(int numbers[], int temp[], int left, int right)
     {
         mid = (right + left) / 2;
 #ifdef PAR
-        ctx_spawn(
+        ctx_invoke(
            [=] { m_sort(numbers, temp, left, mid); },
            [=] { m_sort(numbers, temp, mid+1, right); }
         );
@@ -97,7 +97,7 @@ void quicksort(T* beg, T* end) {
         }
         std::swap(beg[--l], beg[0]);
 #ifdef PAR
-        ctx_spawn(
+        ctx_invoke(
             [=] { quicksort(beg, beg+l); },
             [=] { quicksort(beg+r, end); }
         );
@@ -139,8 +139,8 @@ int main()
         {b,0},
         {0,0}
     };
-    ct_spawn(tasks);
-    ctx_spawn(
+    ct_invoke(tasks);
+    ctx_invoke(
         [] { printf("A\n"); },
         [] { printf("B\n"); }
     );

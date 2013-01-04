@@ -105,7 +105,7 @@ void ct_dispatch_task(int index, void* context)
     t->func(t->arg);
 }
 
-void ct_spawn(const ct_task tasks[])
+void ct_invoke(const ct_task tasks[])
 {
     int i;
     for(i=0; tasks[i].func; ++i);
