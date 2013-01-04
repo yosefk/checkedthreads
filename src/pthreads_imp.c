@@ -1,4 +1,5 @@
 #include "imp.h"
+#include "queue.h"
 
 #ifdef CT_PTHREADS
 
@@ -10,43 +11,30 @@
 typedef struct {
     pthread_cond_t cond;
     pthread_mutex_t mutex;
+    ct_work_queue q;
     pthread_t* threads;
     int num_threads;
     volatile int num_initialized;
     int work_available;
     int terminate;
+    /*
     volatile int next_ind;
     volatile int to_do;
     volatile int n;
     ct_ind_func f;
     void* context;
+    */
 } ct_pthread_pool;
+
+/* TODO: allocate dynamically with an option to set size from environment? */
+#define MAX_ITEMS (8*1024)
+ct_work_item* g_ct_pthread_items[MAX_ITEMS];
 
 ct_pthread_pool g_ct_pthread_pool = {
     PTHREAD_COND_INITIALIZER, PTHREAD_MUTEX_INITIALIZER,
-    0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+    { g_ct_pthread_items, 0, 0, MAX_ITEMS, 0 },
+    0, 0, 0, 0, 0
 };
-
-/* keep yanking jobs (atomic next_ind++ to get next,
-   atomic to_do-- to report that it's done) while
-   there are jobs available (to_do != 0) */
-void ct_pthreads_yank_while_not_done(void) {
-    ct_pthread_pool* pool = &g_ct_pthread_pool;
-    int n = pool->n;
-    ct_ind_func f = pool->f;
-    void* context = pool->context;
-    while(pool->to_do) {
-        int next_ind = pool->next_ind;
-        if(next_ind < n) { /* we don't want to busily increment it
-                              when it exceeds n but we still wait for someone. */
-            next_ind = ATOMIC_FETCH_THEN_INCR(&pool->next_ind, 1);
-            if(next_ind < n) {
-                f(next_ind, context);
-                ATOMIC_FETCH_THEN_DERC(&pool->to_do, 1);
-            }
-        }
-    }
-}
 
 void* ct_pthreads_worker(void* arg) {
     int id = (int)(size_t)arg;
@@ -67,10 +55,16 @@ void* ct_pthreads_worker(void* arg) {
         /* if !work_available (and !terminate),
            it's a spurious wakeup - simply wait again. */
         if(pool->work_available) {
+            ct_work_item* item;
             pthread_mutex_unlock(&pool->mutex);
             /* the master also calls this, and so we all sync using the to_do
                counter - when it reaches 0, we all quit ct_pthreads_yank_while_not_done() */
-            ct_pthreads_yank_while_not_done();
+            do {
+                item = ct_dequeue(&pool->q);
+                if(item) {
+                    ct_work_until_done(item);
+                }
+            } while(item);
             /* lock the mutex back before waiting */
             pthread_mutex_lock(&pool->mutex);
         }
@@ -132,16 +126,43 @@ void ct_pthreads_fini(void) {
 
 void ct_pthreads_for(int n, ct_ind_func f, void* context) {
     ct_pthread_pool* pool = &g_ct_pthread_pool;
-    pool->n = n;
-    pool->to_do = n;
-    pool->next_ind = 0;
-    pool->f = f;
-    pool->context = context;
+    ct_work_queue* q = &pool->q;
+    /* FIXME: we need a pool and proper storage management; this is a leak.
+       the effort here is to know when to free (it can be past the exit point
+       of this function.) */
+    ct_work_item* item = (ct_work_item*)malloc(sizeof(ct_work_item));
+    int reps = n < pool->num_threads ? n : pool->num_threads;
+    int i;
 
-    pool->work_available = 1;
+    item->n = n;
+    item->to_do = n;
+    item->next_ind = 0;
+    item->f = f;
+    item->context = context;
+
+    for(i=0; i<reps; ++i) {
+        /* TODO: sometimes the queue is hopelessly full with things we'll
+           never get to; this doesn't hurt correctness, but can't we do better? */
+        while(!ct_enqueue(q, item)) {
+            if(!ct_do_some_work(item)) { /* we're done while waiting... */
+                /* TODO: here we'd free the item unless it already got enqueued */
+                return;
+            }
+        }
+    }
+
+    /* work_available is managed using atomic increments because there may
+       be concurrent calls to ct_for and wakeups are only truly spurious
+       if work_available reaches zero because no thread has work for it. */
+    ATOMIC_FETCH_THEN_INCR(&pool->work_available, 1);
+
+    /* everybody wake up! we have work for you. */
     ct_pthreads_broadcast();
-    ct_pthreads_yank_while_not_done();
-    pool->work_available = 0;
+
+    /* let's do our share: */
+    ct_work_until_done(item);
+
+    ATOMIC_FETCH_THEN_INCR(&pool->work_available, 1);
 }
 
 ct_imp g_ct_pthreads_imp = {
