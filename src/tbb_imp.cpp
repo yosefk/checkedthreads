@@ -1,4 +1,7 @@
 #include "imp.h"
+
+#ifdef CT_TBB
+
 #include <tbb/tbb.h>
 
 void ctx_tbb_init(int num_threads) {
@@ -52,3 +55,9 @@ ct_imp g_ct_tbb_imp = {
     &ctx_tbb_fini,
     &ctx_tbb_for,
 };
+
+#else
+
+ct_imp g_ct_tbb_imp;
+
+#endif

@@ -41,7 +41,8 @@ const char* ct_getenv(const ct_env_var* env, const char* name, const char* defau
 ct_imp* ct_sched(const char* name) {
     int i=0;
     while(g_ct_imps[i]) {
-        if(strcmp(g_ct_imps[i]->name, name) == 0) {
+        const char* namei = g_ct_imps[i]->name;
+        if(namei && strcmp(namei, name) == 0) {
             return g_ct_imps[i];
         }
         ++i;
@@ -49,9 +50,28 @@ ct_imp* ct_sched(const char* name) {
     return 0;
 }
 
+/* choosing the default scheduler isn't trivial because we don't easily know
+   which are available; it depends on config.h and on the library we're linked into. */
+const char* ct_default_sched() {
+    int i=0;
+    const char* prefs[] = {"openmp","tbb","pthreads",0};
+    while(g_ct_imps[i]) {
+        const char* namei = g_ct_imps[i]->name;
+        int j=0;
+        while(prefs[j]) {
+            if(namei && strcmp(namei,prefs[j]) == 0) {
+                return namei;
+            }
+            ++j;
+        }
+        ++i;
+    }
+    return "serial"; /* if no parallel scheduler is available, is a serial one better than crashing?.. */
+}
+
 void ct_init(const ct_env_var* env) {
     int num_threads = atoi(ct_getenv(env, "CT_THREADS", "0"));
-    const char* default_sched = "openmp";
+    const char* default_sched = ct_default_sched();
     const char* sched = ct_getenv(env, "CT_SCHED", default_sched);
     g_ct_pimpl = ct_sched(sched);
     if(!g_ct_pimpl) {

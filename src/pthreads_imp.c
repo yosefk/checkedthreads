@@ -1,7 +1,10 @@
+#include "imp.h"
+
+#ifdef CT_PTHREADS
+
 #include <stdio.h>
 #include <pthread.h>
 #include <stdlib.h>
-#include "imp.h"
 #include "atomic.h"
 
 typedef struct {
@@ -147,3 +150,10 @@ ct_imp g_ct_pthreads_imp = {
     &ct_pthreads_fini,
     &ct_pthreads_for,
 };
+
+#else
+
+ct_imp g_ct_pthreads_imp;
+
+#endif
+

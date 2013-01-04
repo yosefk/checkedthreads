@@ -1,5 +1,7 @@
 #include "imp.h"
 
+#ifdef CT_OPENMP
+
 void ct_openmp_init(int num_threads) {
     (void)num_threads;
 }
@@ -31,3 +33,9 @@ ct_imp g_ct_openmp_imp = {
     &ct_openmp_fini,
     &ct_openmp_for,
 };
+
+#else
+
+ct_imp g_ct_openmp_imp;
+
+#endif
