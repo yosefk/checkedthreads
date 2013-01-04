@@ -1,5 +1,4 @@
 #!/usr/bin/python
-# TODO: check if g++ is available and if C++11 is supported.
 import commands
 
 def compiles_and_runs(compiler_cmd,run_cmd,expected_output_substr):

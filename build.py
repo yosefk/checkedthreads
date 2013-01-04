@@ -26,11 +26,11 @@ those schedulers built into checkedthreads.
 '''
 
 dirs = 'obj lib bin'.split()
-srcsc = 'ct_api.c serial_imp.c pthreads_imp.c openmp_imp.c shuffle_imp.c valgrind_imp.c'.split()
+srcsc = 'ct_api.c serial_imp.c pthreads_imp.c openmp_imp.c shuffle_imp.c valgrind_imp.c queue.c'.split()
 srcsxx = 'ctx_api.cpp tbb_imp.cpp'.split()
 libc = 'checkedthreads'
 libxx = 'checkedthreads++'
-tests = 'hello_ct.c hello_ctx.cpp'.split()
+tests = 'hello_ct.c hello_ctx.cpp nested.cpp sort.cpp'.split()
 
 # utilities
 ###########
@@ -123,7 +123,7 @@ def flags(compiler):
     return {
         'gcc':'-std=c89',
         'g++':'-std=' + ('c++0x' if 'C++11' in enabled else 'c++98'),
-    }[compiler] + ' -pedantic -Wall -Wextra -Werror -g ' + all_enabled('compiler_flags')
+    }[compiler] + ' -pedantic -Wall -Wextra -Werror -g -O3 ' + all_enabled('compiler_flags')
 
 def compiler(fname):
     ext = fname.split('.')[-1]
