@@ -53,18 +53,18 @@ ct_imp* ct_sched(const char* name) {
 /* choosing the default scheduler isn't trivial because we don't easily know
    which are available; it depends on config.h and on the library we're linked into. */
 const char* ct_default_sched() {
-    int i=0;
     const char* prefs[] = {"openmp","tbb","pthreads",0};
-    while(g_ct_imps[i]) {
-        const char* namei = g_ct_imps[i]->name;
-        int j=0;
-        while(prefs[j]) {
+    int j=0;
+    while(prefs[j]) {
+        int i=0;
+        while(g_ct_imps[i]) {
+            const char* namei = g_ct_imps[i]->name;
             if(namei && strcmp(namei,prefs[j]) == 0) {
                 return namei;
             }
-            ++j;
+            ++i;
         }
-        ++i;
+        ++j;
     }
     return "serial"; /* if no parallel scheduler is available, is a serial one better than crashing?.. */
 }
@@ -96,6 +96,20 @@ void ct_fini(void) {
     if(g_ct_verbose) {
         printf("checkedthreads: finalized\n");
     }
+}
+
+void ct_dispatch_task(int index, void* context)
+{
+    const ct_task* tasks = (const ct_task*)context;
+    const ct_task* t = tasks + index;
+    t->func(t->arg);
+}
+
+void ct_spawn(const ct_task tasks[])
+{
+    int i;
+    for(i=0; tasks[i].func; ++i);
+    ct_for(i, ct_dispatch_task, (void*)tasks);
 }
 
 typedef struct {
