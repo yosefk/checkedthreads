@@ -2,11 +2,12 @@
 #include "time.h"
 #include <algorithm>
 #include <stdio.h>
+#include <tbb/tbb.h>
 
 void a(void*) { printf("a\n"); }
 void b(void*) { printf("b\n"); }
 
-#define MIN_PAR 1024
+#define MIN_PAR (1024*32)
 #define PAR
 const int N = 1024*1024*16;
 
@@ -145,9 +146,16 @@ int main()
         [] { printf("B\n"); }
     );
 #endif
+    int* nums=0;
+    const int nsorts = 3;
+    const char* descr[nsorts] = {
+        "quicksort",
+        "mergesort",
+        "TBB  sort",
+    };
 
-    for(int t=0; t<2; ++t) {
-        int* nums = new int[N];
+    for(int t=0; t<nsorts; ++t) {
+        nums = new int[N];
         int i;
         for(i=0; i<N; ++i) {
             nums[i] = i;
@@ -155,14 +163,13 @@ int main()
         std::random_shuffle(nums, nums+N);
 
         unsigned long long usec_start = curr_usec();
-        if(t==0) {
-            quicksort(nums, nums+N);
-        }
-        else {
-            mergeSort(nums, new int[N], N);
-        }
+        switch(t) {
+            case 0: quicksort(nums, nums+N); break;
+            case 1: mergeSort(nums, new int[N], N); break;
+            case 2: tbb::parallel_sort(nums, nums+N); break;
+        };
         unsigned long long usec_finish = curr_usec();
-        printf("%f seconds\n", (usec_finish - usec_start)/1000000.);
+        printf("%s: %f seconds\n", descr[t], (usec_finish - usec_start)/1000000.);
 
         print_and_check_results(nums);
     }

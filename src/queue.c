@@ -49,7 +49,7 @@ ct_work_item* ct_dequeue(ct_work_queue* q) {
     return q->work_items[read_ind];
 }
 
-void ct_work_until_done(ct_work_item* item) {
+void ct_work_until_done(ct_work_item* item, int quit_if_no_work) {
     int n = item->n;
     ct_ind_func f = item->f;
     void* context = item->context;
@@ -62,6 +62,9 @@ void ct_work_until_done(ct_work_item* item) {
                 f(next_ind, context);
                 ATOMIC_FETCH_THEN_DECR(&item->to_do, 1);
             }
+        }
+        else if(quit_if_no_work) {
+            return;
         }
     }
 }

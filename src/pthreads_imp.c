@@ -62,7 +62,7 @@ void* ct_pthreads_worker(void* arg) {
             do {
                 item = ct_dequeue(&pool->q);
                 if(item) {
-                    ct_work_until_done(item);
+                    ct_work_until_done(item, 1);
                 }
             } while(item);
             /* lock the mutex back before waiting */
@@ -143,6 +143,7 @@ void ct_pthreads_for(int n, ct_ind_func f, void* context) {
     for(i=0; i<reps; ++i) {
         /* TODO: sometimes the queue is hopelessly full with things we'll
            never get to; this doesn't hurt correctness, but can't we do better? */
+        /* TODO: ...and WHY is the queue full? shouldn't we skip some of that stuff? */
         while(!ct_enqueue(q, item)) {
             if(!ct_do_some_work(item)) { /* we're done while waiting... */
                 /* TODO: here we'd free the item unless it already got enqueued */
@@ -160,7 +161,17 @@ void ct_pthreads_for(int n, ct_ind_func f, void* context) {
     ct_pthreads_broadcast();
 
     /* let's do our share: */
-    ct_work_until_done(item);
+    ct_work_until_done(item, 1);
+
+    while(item->to_do > 0) {
+        ct_work_item* another_item;
+        do {
+            another_item = ct_dequeue(q);
+            if(another_item) {
+                ct_work_until_done(another_item, 1);
+            }
+        } while(another_item);
+    }
 
     ATOMIC_FETCH_THEN_INCR(&pool->work_available, 1);
 }

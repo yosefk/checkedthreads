@@ -27,7 +27,7 @@ int ct_enqueue(ct_work_queue* q, ct_work_item* item);
 ct_work_item* ct_dequeue(ct_work_queue* q);
 
 /* effectively, a single work item is itself a queue of indexes shared with other consumers. */
-void ct_work_until_done(ct_work_item* item);
+void ct_work_until_done(ct_work_item* item, int quit_if_no_work);
 /* this is useful when you're waiting for something that you hope will soon happen, so you want
    to do a small share of work but not too much. non-zero iff work remains for a next call. */
 int ct_do_some_work(ct_work_item* item);
