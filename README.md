@@ -38,10 +38,19 @@ checkedthreads if a desirable subset of these features is not available in anoth
   policy.) A single queue is not necessarily scalable to a thousand of cores, but it otherwise provides
   optimal load balancing: work gets done as soon as someone is available to do it. So you get nice
   performance on practical hardware configurations.
-* **Custom schedulers**.
-* **A C89 as well as a C++11 API**.
+* **Custom schedulers**: if you prefer a different scheduling policy, you can implement a scheduler
+  of your own - you need to implement the same simple interface that is used to implement
+  schedulers supplied together with checkedthreads.
+* **A C89 as well as a C++11 API**. No compiler extensions (pragmas, keywords, etc.) are involved,
+  and while C++11 lambdas and variadic templates are used when available to provide some syntactic
+  sugar, the underlying C89 API is useable directly as well.
 * **Free** as in no license, no charge, and no restrictions on how the code may be used.
-* **Portability**.
+* **Portability**. Very little is assumed about the target platform. It is enough to have a C89
+  compiler and an address space shared by a bunch of threads - in fact you don't even need "threads"
+  as in "an OS with preemptive scheduling"; you could rather easily port checkedthreads to run
+  on a machine without any OS. (However, currently checkedthreads is only developed and tested on
+  Linux [Ubuntu 12]; please tell if you have problems using it on another platform or if you
+  want it to be easier to build it on another platform.)
 
 Why another framework?
 ======================
