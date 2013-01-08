@@ -12,8 +12,14 @@ All of them! checkedthreads provides two verification methods:
 * **Thorough verification** using Valgrind-based instrumentation that monitors memory accesses
   and flags accesses to data owned by another thread.
 
-There are more details below; the upshot is that every race condition that could **ever** manifest on your inputs
-will be found.
+There are more details below; the upshot is that every race condition will be found if:
+
+* It could **ever** manifest on the given inputs.
+* The bug is actually a race condition :-) (What looks like a race condition but isn't a
+  race condition? Consider using uninitialized memory returned
+  by malloc. This is a bug regardless of concurrency. This also leads to non-deterministic
+  results in concurrent programs. But the bug is not a race condition, and while
+  checkedthreads may help find the bug, no guarantees are made - unlike with pure race conditions.)
 
 Why this framework?
 ===================
