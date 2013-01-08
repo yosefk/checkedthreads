@@ -3,8 +3,8 @@ checkedthreads
 
 checkedthreads: no race condition goes unnoticed! API, auto load balancing, Valgrind-based checking.
 
-What race conditions are found?
-===============================
+What race conditions can be found?
+==================================
 
 All of them! checkedthreads provides two verification methods:
 
@@ -28,10 +28,20 @@ checkedthreads if a desirable subset of these features is not available in anoth
   hard-to-chase bugs. For checkedthreads, easy debugging is a top priority: the API is designed
   to make it possible to find **all** concurrency bugs that could ever manifest on given data,
   and a Valgrind-based checker is provided that does so.
-* **Integration with other frameworks**.
-* **Dynamic load balancing**.
+* **Integration with other frameworks**. If your code already uses TBB or OpenMP, you can have
+  checkedthreads use TBB or OpenMP to run the tasks you create with the checkedthreads API.
+  This way you can use checkedthreads alongside another framework without the two fighting over
+  the machine. (Please tell if you'd like to have checkedthreads use another framework such as PPL.)
+* **Dynamic load balancing**. checkedthreads comes with its own scheduler where all tasks are
+  put in a single queue and processed by the thread from the workers pool which is "the quickest
+  to dequeue it". (When using TBB or OpenMP, checkedthreads tries to approximate this scheduling
+  policy.) A single queue is not necessarily scalable to a thousand of cores, but it otherwise provides
+  optimal load balancing: work gets done as soon as someone is available to do it. So you get nice
+  performance on practical hardware configurations.
+* **Custom schedulers**.
 * **A C89 as well as a C++11 API**.
 * **Free** as in no license, no charge, and no restrictions on how the code may be used.
+* **Portability**.
 
 Why another framework?
 ======================
