@@ -15,6 +15,24 @@ All of them! checkedthreads provides two verification methods:
 There are more details below; the upshot is that very race condition that could *ever* manifest on your inputs
 will be found.
 
+Why this framework?
+===================
+
+checkedthreads is a fork-join parallelism framework not unlike many others, such as Intel TBB,
+Microsoft PPL, Cilk, OpenMP or GNU libstdc++ parallel mode. Why would one choose checkedthreads?
+
+Here are some checkedthreads features you may find useful, and which may compell one to use
+checkedthreads if a desirable subset of these features is not available in another framework:
+
+* **Guaranteed bug detection**. Concurrent imperative programs have a bad reputation because of
+  hard-to-chase bugs. For checkedthreads, easy debugging is a top priority: the API is designed
+  to make it possible to find **all** concurrency bugs that could ever manifest on given data,
+  and a Valgrind-based checker is provided that does so.
+* **Integration with other frameworks**.
+* **Dynamic load balancing**.
+* **A C89 as well as a C++11 API**.
+* **Free** as in no license, no charge, and no restrictions on how the code may be used.
+
 Why another framework?
 ======================
 
