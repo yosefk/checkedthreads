@@ -123,7 +123,7 @@ def flags(compiler):
     return {
         'gcc':'-std=c89',
         'g++':'-std=' + ('c++0x' if 'C++11' in enabled else 'c++98'),
-    }[compiler] + ' -pedantic -Wall -Wextra -Werror -g -O3 ' + all_enabled('compiler_flags')
+    }[compiler] + ' -pedantic -Wall -Wextra -Werror -Wno-unused -g -O3 ' + all_enabled('compiler_flags')
 
 def compiler(fname):
     ext = fname.split('.')[-1]

@@ -1,5 +1,8 @@
 #!/usr/bin/python
-import commands
+import commands, os
+
+for dir in 'obj lib bin'.split():
+    os.system('mkdir -p '+dir)
 
 def compiles_and_runs(compiler_cmd,run_cmd,expected_output_substr):
     andcmd = compiler_cmd + ' && ' + run_cmd
