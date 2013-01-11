@@ -57,6 +57,9 @@ void* ct_pthreads_worker(void* arg) {
                 item = ct_locked_dequeue(&pool->q);
                 if(item) {
                     ct_work_until_done(item, 1);
+                    if(ATOMIC_FETCH_THEN_DECR(&item->ref_cnt, 1) == 1) {
+                        free(item);
+                    }
                 }
             } while(item);
             /* lock the mutex back before waiting */
@@ -126,8 +129,8 @@ void ct_pthreads_fini(void) {
 void ct_pthreads_for(int n, ct_ind_func f, void* context) {
     ct_pthread_pool* pool = &g_ct_pthread_pool;
     ct_locked_queue* q = &pool->q;
-    ct_work_item my_item;
-    ct_work_item* item = &my_item;
+    /* ct_work_item my_item; */
+    ct_work_item* item = (ct_work_item*)malloc(sizeof(ct_work_item));/* &my_item; */
     int reps = n < pool->num_threads ? n : pool->num_threads;
     int i;
 
@@ -136,7 +139,7 @@ void ct_pthreads_for(int n, ct_ind_func f, void* context) {
     item->next_ind = 0;
     item->f = f;
     item->context = context;
-    item->ref_cnt = 0; /* we don't count... */
+    item->ref_cnt = reps + 1;
 
     /* try to enqueue the item, and do some work while that fails */
     while(!ct_locked_enqueue(q, item, reps)) {
@@ -161,17 +164,23 @@ void ct_pthreads_for(int n, ct_ind_func f, void* context) {
     /* let's do our share: */
     ct_work_until_done(item, 1);
 
-    while(item->to_do > 0 || item->ref_cnt > 0) {
+    while(item->to_do > 0) {
         ct_work_item* another_item;
         do {
             another_item = ct_locked_dequeue(q);
             if(another_item) {
                 ct_work_until_done(another_item, 1);
+                if(ATOMIC_FETCH_THEN_DECR(&another_item->ref_cnt, 1) == 1) {
+                    free(another_item);
+                }
             }
         } while(another_item);
     }
+    if(ATOMIC_FETCH_THEN_DECR(&item->ref_cnt, 1) == 1) {
+        free(item);
+    }
 
-    ATOMIC_FETCH_THEN_INCR(&pool->work_available, 1);
+    ATOMIC_FETCH_THEN_DECR(&pool->work_available, 1);
 }
 
 ct_imp g_ct_pthreads_imp = {

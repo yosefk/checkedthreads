@@ -1,4 +1,5 @@
 #include "lock_based_queue.h"
+#include "atomic.h"
 
 void ct_locked_queue_init(ct_locked_queue* q, ct_work_item** work_items, int capacity) {
     pthread_mutex_init(&q->mutex, 0);
@@ -31,7 +32,6 @@ int ct_locked_enqueue(ct_locked_queue* q, ct_work_item* item, int reps) {
         }
         q->write_ind = w;
         q->size += reps;
-        item->ref_cnt += reps;
         ret = 1;
     }
     pthread_mutex_unlock(&q->mutex);
@@ -55,7 +55,6 @@ ct_work_item* ct_locked_dequeue(ct_locked_queue* q) {
         }
         q->read_ind = r;
         q->size -= 1;
-        ret->ref_cnt -= 1;
     }
     pthread_mutex_unlock(&q->mutex);
     return ret;
