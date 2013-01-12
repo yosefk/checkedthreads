@@ -26,7 +26,7 @@ those schedulers built into checkedthreads.
 '''
 
 dirs = 'obj lib bin'.split()
-srcsc = 'ct_api.c serial_imp.c pthreads_imp.c openmp_imp.c shuffle_imp.c valgrind_imp.c queue.c lock_based_queue.c'.split()
+srcsc = 'ct_api.c serial_imp.c pthreads_imp.c openmp_imp.c shuffle_imp.c valgrind_imp.c queue.c lock_based_queue.c nprocs.c'.split()
 srcsxx = 'ctx_api.cpp tbb_imp.cpp'.split()
 libc = 'checkedthreads'
 libxx = 'checkedthreads++'

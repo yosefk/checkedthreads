@@ -1,5 +1,6 @@
 #include "imp.h"
 #include "queue.h" /* FIXME */
+#include "nprocs.h"
 #include "lock_based_queue.h"
 
 #ifdef CT_PTHREADS
@@ -87,8 +88,7 @@ void ct_pthreads_init(int num_threads) {
     /* TODO: what should num_threads mean - including the master or not? what
        does it mean in TBB, OpenMP, etc.? */
     if(num_threads == 0) {
-        printf("checkedthreads - WARNING: $CT_THREADS not set to non-zero value; using 2 pthreads.\n");
-        num_threads = 2;
+        num_threads = ct_nprocs();
     }
     /* here, num_threads means "number of slaves", whereas $CT_THREADS is the total number,
        including the master */
