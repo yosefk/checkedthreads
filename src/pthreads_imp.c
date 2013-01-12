@@ -1,5 +1,7 @@
 #include "imp.h"
-#include "queue.h"
+#include "queue.h" /* FIXME */
+#include "nprocs.h"
+#include "lock_based_queue.h"
 
 #ifdef CT_PTHREADS
 
@@ -11,19 +13,12 @@
 typedef struct {
     pthread_cond_t cond;
     pthread_mutex_t mutex;
-    ct_work_queue q;
+    ct_locked_queue q;
     pthread_t* threads;
     int num_threads;
     volatile int num_initialized;
     int work_available;
     int terminate;
-    /*
-    volatile int next_ind;
-    volatile int to_do;
-    volatile int n;
-    ct_ind_func f;
-    void* context;
-    */
 } ct_pthread_pool;
 
 /* TODO: allocate dynamically with an option to set size from environment? */
@@ -32,7 +27,7 @@ ct_work_item* g_ct_pthread_items[MAX_ITEMS];
 
 ct_pthread_pool g_ct_pthread_pool = {
     PTHREAD_COND_INITIALIZER, PTHREAD_MUTEX_INITIALIZER,
-    { g_ct_pthread_items, 0, 0, MAX_ITEMS, 0 },
+    CT_LOCKED_QUEUE_INITIALIZER,
     0, 0, 0, 0, 0
 };
 
@@ -60,9 +55,12 @@ void* ct_pthreads_worker(void* arg) {
             /* the master also calls this, and so we all sync using the to_do
                counter - when it reaches 0, we all quit ct_pthreads_yank_while_not_done() */
             do {
-                item = ct_dequeue(&pool->q);
+                item = ct_locked_dequeue(&pool->q);
                 if(item) {
                     ct_work_until_done(item, 1);
+                    if(ATOMIC_FETCH_THEN_DECR(&item->ref_cnt, 1) == 1) {
+                        free(item);
+                    }
                 }
             } while(item);
             /* lock the mutex back before waiting */
@@ -90,11 +88,15 @@ void ct_pthreads_init(int num_threads) {
     /* TODO: what should num_threads mean - including the master or not? what
        does it mean in TBB, OpenMP, etc.? */
     if(num_threads == 0) {
-        printf("checkedthreads - WARNING: $CT_THREADS not set to non-zero value; using 2 pthreads.\n");
-        num_threads = 2;
+        num_threads = ct_nprocs();
     }
+    /* here, num_threads means "number of slaves", whereas $CT_THREADS is the total number,
+       including the master */
+    num_threads--;
+
     pthread_cond_init(&pool->cond, 0);
     pthread_mutex_init(&pool->mutex, 0);
+    ct_locked_queue_init(&pool->q, g_ct_pthread_items, MAX_ITEMS);
     pool->threads = (pthread_t*)malloc(sizeof(pthread_t)*num_threads);
     pool->num_threads = num_threads;
     /* For portability, explicitly create threads in a joinable state.
@@ -126,11 +128,9 @@ void ct_pthreads_fini(void) {
 
 void ct_pthreads_for(int n, ct_ind_func f, void* context) {
     ct_pthread_pool* pool = &g_ct_pthread_pool;
-    ct_work_queue* q = &pool->q;
-    /* FIXME: we need a pool and proper storage management; this is a leak.
-       the effort here is to know when to free (it can be past the exit point
-       of this function.) */
-    ct_work_item* item = (ct_work_item*)malloc(sizeof(ct_work_item));
+    ct_locked_queue* q = &pool->q;
+    /* ct_work_item my_item; */
+    ct_work_item* item = (ct_work_item*)malloc(sizeof(ct_work_item));/* &my_item; */
     int reps = n < pool->num_threads ? n : pool->num_threads;
     int i;
 
@@ -139,22 +139,23 @@ void ct_pthreads_for(int n, ct_ind_func f, void* context) {
     item->next_ind = 0;
     item->f = f;
     item->context = context;
+    item->ref_cnt = reps + 1;
 
-    for(i=0; i<reps; ++i) {
-        /* TODO: sometimes the queue is hopelessly full with things we'll
-           never get to; this doesn't hurt correctness, but can't we do better? */
-        /* TODO: ...and WHY is the queue full? shouldn't we skip some of that stuff? */
-        while(!ct_enqueue(q, item)) {
-            if(!ct_do_some_work(item)) { /* we're done while waiting... */
-                /* TODO: here we'd free the item unless it already got enqueued */
-                return;
-            }
+    /* try to enqueue the item, and do some work while that fails */
+    while(!ct_locked_enqueue(q, item, reps)) {
+        --n;
+        f(n, context);
+        if(n == 0) { /* we're done while waiting... */
+            return;
         }
+        item->n = n;
+        item->to_do = n;
     }
 
     /* work_available is managed using atomic increments because there may
        be concurrent calls to ct_for and wakeups are only truly spurious
-       if work_available reaches zero because no thread has work for it. */
+       if work_available reaches zero because no thread has enqueued any work. */
+    /* TODO: we don't need work_available if the dequeue function tells us when the q is empty...*/
     ATOMIC_FETCH_THEN_INCR(&pool->work_available, 1);
 
     /* everybody wake up! we have work for you. */
@@ -166,14 +167,20 @@ void ct_pthreads_for(int n, ct_ind_func f, void* context) {
     while(item->to_do > 0) {
         ct_work_item* another_item;
         do {
-            another_item = ct_dequeue(q);
+            another_item = ct_locked_dequeue(q);
             if(another_item) {
                 ct_work_until_done(another_item, 1);
+                if(ATOMIC_FETCH_THEN_DECR(&another_item->ref_cnt, 1) == 1) {
+                    free(another_item);
+                }
             }
         } while(another_item);
     }
+    if(ATOMIC_FETCH_THEN_DECR(&item->ref_cnt, 1) == 1) {
+        free(item);
+    }
 
-    ATOMIC_FETCH_THEN_INCR(&pool->work_available, 1);
+    ATOMIC_FETCH_THEN_DECR(&pool->work_available, 1);
 }
 
 ct_imp g_ct_pthreads_imp = {

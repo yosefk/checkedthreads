@@ -1,15 +1,7 @@
 #ifndef CT_QUEUE_H_
 #define CT_QUEUE_H_
 
-#include "imp.h"
-
-typedef struct {
-    volatile int next_ind;
-    volatile int to_do;
-    volatile int n;
-    ct_ind_func f;
-    void* context;
-} ct_work_item;
+#include "work_item.h"
 
 typedef struct {
     /* work items are kept by pointer; the idea is that a single pointer is enqueued up to N times,
@@ -17,7 +9,7 @@ typedef struct {
     ct_work_item** work_items;
     volatile int write_ind; /* producer's next task to write is work_items[write_ind] */
     volatile int read_ind; /* consumer's next task to read is work_items[read_ind] */
-    volatile int capacity;
+    int capacity;
     int size;
 } ct_work_queue;
 
