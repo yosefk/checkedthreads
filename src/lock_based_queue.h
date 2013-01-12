@@ -10,10 +10,10 @@
 typedef struct {
     pthread_mutex_t mutex; /* currently everything is protected by one mutex */
     ct_work_item** work_items;
-    int read_ind;
-    int write_ind;
     int capacity;
-    int size;
+    volatile int read_ind;
+    volatile int write_ind;
+    volatile int size;
 } ct_locked_queue;
 
 #define CT_LOCKED_QUEUE_INITIALIZER { PTHREAD_MUTEX_INITIALIZER, 0, 0, 0, 0, 0 }

@@ -16,7 +16,6 @@ typedef struct {
     pthread_t* threads;
     int num_threads;
     volatile int num_initialized;
-    int work_available;
     int terminate;
 } ct_pthread_pool;
 
@@ -27,7 +26,7 @@ ct_work_item* g_ct_pthread_items[MAX_ITEMS];
 ct_pthread_pool g_ct_pthread_pool = {
     PTHREAD_COND_INITIALIZER, PTHREAD_MUTEX_INITIALIZER,
     CT_LOCKED_QUEUE_INITIALIZER,
-    0, 0, 0, 0, 0
+    0, 0, 0, 0
 };
 
 void ct_pthreads_dequeue_work(ct_locked_queue* q) {
@@ -59,14 +58,10 @@ void* ct_pthreads_worker(void* arg) {
         pthread_cond_wait(&pool->cond, &pool->mutex);
         /* ...and locks it back before it returns. */
 
-        /* if !work_available (and !terminate),
-           it's a spurious wakeup - simply wait again. */
-        if(pool->work_available) {
-            pthread_mutex_unlock(&pool->mutex);
-            ct_pthreads_dequeue_work(&pool->q);
-            /* lock the mutex back before waiting */
-            pthread_mutex_lock(&pool->mutex);
-        }
+        /* we're OK with spurious wakeups - ct_locked_dequeue will simply return 0 */
+        pthread_mutex_unlock(&pool->mutex);
+        ct_pthreads_dequeue_work(&pool->q);
+        pthread_mutex_lock(&pool->mutex);
     }
     pthread_mutex_unlock(&pool->mutex);
     return 0;
@@ -121,15 +116,25 @@ void ct_pthreads_fini(void) {
     }
     pthread_mutex_destroy(&pool->mutex);
     pthread_cond_destroy(&pool->cond);
+    free(pool->threads);
 }
 
 void ct_pthreads_for(int n, ct_ind_func f, void* context) {
     ct_pthread_pool* pool = &g_ct_pthread_pool;
     ct_locked_queue* q = &pool->q;
-    /* ct_work_item my_item; */
-    ct_work_item* item = (ct_work_item*)malloc(sizeof(ct_work_item));/* &my_item; */
-    int reps = n < pool->num_threads ? n : pool->num_threads;
-    int i;
+    ct_work_item* item;
+    int reps;
+
+    while(q->size == q->capacity) {
+        --n;
+        f(n, context);
+        if(n == 0) { /* we're done while waiting... */
+            return;
+        }
+    }
+
+    item = (ct_work_item*)malloc(sizeof(ct_work_item));
+    reps = n < pool->num_threads ? n : pool->num_threads;
 
     item->n = n;
     item->to_do = n;
@@ -143,17 +148,12 @@ void ct_pthreads_for(int n, ct_ind_func f, void* context) {
         --n;
         f(n, context);
         if(n == 0) { /* we're done while waiting... */
+            free(item);
             return;
         }
         item->n = n;
         item->to_do = n;
     }
-
-    /* work_available is managed using atomic increments because there may
-       be concurrent calls to ct_for and wakeups are only truly spurious
-       if work_available reaches zero because no thread has enqueued any work. */
-    /* TODO: we don't need work_available if the dequeue function tells us when the q is empty...*/
-    ATOMIC_FETCH_THEN_INCR(&pool->work_available, 1);
 
     /* everybody wake up! we have work for you. */
     ct_pthreads_broadcast();
@@ -171,8 +171,6 @@ void ct_pthreads_for(int n, ct_ind_func f, void* context) {
     if(ATOMIC_FETCH_THEN_DECR(&item->ref_cnt, 1) == 1) {
         free(item);
     }
-
-    ATOMIC_FETCH_THEN_DECR(&pool->work_available, 1);
 }
 
 ct_imp g_ct_pthreads_imp = {
