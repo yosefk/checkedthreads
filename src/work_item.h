@@ -12,5 +12,9 @@ typedef struct {
     void* context;
 } ct_work_item;
 
+/* returns when next_ind reaches or exceeds n - all work was already yanked.
+   this doesn't mean we're done - to_do==0 means that. */
+void ct_work(ct_work_item* item);
+
 #endif
 

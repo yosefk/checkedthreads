@@ -53,7 +53,7 @@ ct_imp* ct_sched(const char* name) {
 /* choosing the default scheduler isn't trivial because we don't easily know
    which are available; it depends on config.h and on the library we're linked into. */
 const char* ct_default_sched() {
-    const char* prefs[] = {"openmp","tbb","pthreads",0};
+    const char* prefs[] = {"pthreads","tbb","openmp",0};
     int j=0;
     while(prefs[j]) {
         int i=0;

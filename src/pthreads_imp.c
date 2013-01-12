@@ -1,5 +1,4 @@
 #include "imp.h"
-#include "queue.h" /* FIXME */
 #include "nprocs.h"
 #include "lock_based_queue.h"
 
@@ -31,6 +30,19 @@ ct_pthread_pool g_ct_pthread_pool = {
     0, 0, 0, 0, 0
 };
 
+void ct_pthreads_dequeue_work(ct_locked_queue* q) {
+    ct_work_item* item;
+    do {
+        item = ct_locked_dequeue(q);
+        if(item) {
+            ct_work(item);
+            if(ATOMIC_FETCH_THEN_DECR(&item->ref_cnt, 1) == 1) {
+                free(item);
+            }
+        }
+    } while(item);
+}
+
 void* ct_pthreads_worker(void* arg) {
     int id = (int)(size_t)arg;
     ct_pthread_pool* pool = &g_ct_pthread_pool;
@@ -50,19 +62,8 @@ void* ct_pthreads_worker(void* arg) {
         /* if !work_available (and !terminate),
            it's a spurious wakeup - simply wait again. */
         if(pool->work_available) {
-            ct_work_item* item;
             pthread_mutex_unlock(&pool->mutex);
-            /* the master also calls this, and so we all sync using the to_do
-               counter - when it reaches 0, we all quit ct_pthreads_yank_while_not_done() */
-            do {
-                item = ct_locked_dequeue(&pool->q);
-                if(item) {
-                    ct_work_until_done(item, 1);
-                    if(ATOMIC_FETCH_THEN_DECR(&item->ref_cnt, 1) == 1) {
-                        free(item);
-                    }
-                }
-            } while(item);
+            ct_pthreads_dequeue_work(&pool->q);
             /* lock the mutex back before waiting */
             pthread_mutex_lock(&pool->mutex);
         }
@@ -71,8 +72,7 @@ void* ct_pthreads_worker(void* arg) {
     return 0;
 }
 
-void ct_pthreads_broadcast(void)
-{
+void ct_pthreads_broadcast(void) {
     ct_pthread_pool* pool = &g_ct_pthread_pool;
     pthread_mutex_lock(&pool->mutex);
     pthread_cond_broadcast(&pool->cond);
@@ -83,10 +83,7 @@ void ct_pthreads_init(int num_threads) {
     ct_pthread_pool* pool = &g_ct_pthread_pool;
     pthread_attr_t attr;
     int i;
-    /* TODO: we should figure out #cores instead. */
     /* TODO: we might want a way to get the threads for the pool from the outside. */
-    /* TODO: what should num_threads mean - including the master or not? what
-       does it mean in TBB, OpenMP, etc.? */
     if(num_threads == 0) {
         num_threads = ct_nprocs();
     }
@@ -162,20 +159,15 @@ void ct_pthreads_for(int n, ct_ind_func f, void* context) {
     ct_pthreads_broadcast();
 
     /* let's do our share: */
-    ct_work_until_done(item, 1);
+    ct_work(item);
 
+    /* do work from the queue until the item is done (we may be out of indexes
+       but it doesn't mean everyone else who's yanked some indexes is done;
+       item->to_do reaching 0 will tell us they're done.) */
     while(item->to_do > 0) {
-        ct_work_item* another_item;
-        do {
-            another_item = ct_locked_dequeue(q);
-            if(another_item) {
-                ct_work_until_done(another_item, 1);
-                if(ATOMIC_FETCH_THEN_DECR(&another_item->ref_cnt, 1) == 1) {
-                    free(another_item);
-                }
-            }
-        } while(another_item);
+        ct_pthreads_dequeue_work(&pool->q);
     }
+
     if(ATOMIC_FETCH_THEN_DECR(&item->ref_cnt, 1) == 1) {
         free(item);
     }
