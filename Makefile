@@ -1,16 +1,23 @@
+include defaults.mk
+
 export PYTHONDONTWRITEBYTECODE=1
-default: build tests
+
+.PHONY: build valgrind tests clean help
+default: build valgrind tests
 build:
 	@./build.py
+valgrind:
+	@./valgrind/build.py
 tests:
 	@./test.py
 clean:
 	rm -rf bin lib obj
 help:
-	@echo make "# build and test"
+	@echo make "          # build the libraries and the valgrind tool and test"
 	@echo make VERBOSE=1 "# print stuff"
 	@echo make VERBOSE=2 "# print more stuff"
-	@echo make build "# without testing"
-	@echo make tests "# without building"
-	@echo make clean "# remove bin/, lib/, and obj/"
+	@echo make build "    # build the libraries"
+	@echo make valgrind " # build the valgrind tool"
+	@echo make tests "    # test the libraries and the valgrind tool"
+	@echo make clean "    # remove bin/, lib/, and obj/"
 

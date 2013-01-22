@@ -1,7 +1,7 @@
 #include "imp.h"
 
-void ct_serial_init(int num_threads) {
-    (void)num_threads;
+void ct_serial_init(const ct_env_var* env) {
+    (void)env;
 }
 
 void ct_serial_fini(void) {

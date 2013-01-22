@@ -4,7 +4,8 @@
 
 #include <tbb/tbb.h>
 
-void ctx_tbb_init(int num_threads) {
+void ctx_tbb_init(const ct_env_var* env) {
+    int num_threads = atoi(ct_getenv(env, "CT_THREADS", "0"));
     if(num_threads) {
         static tbb::task_scheduler_init init(num_threads);
     }

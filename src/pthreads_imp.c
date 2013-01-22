@@ -74,7 +74,8 @@ void ct_pthreads_broadcast(void) {
     pthread_mutex_unlock(&pool->mutex);
 }
 
-void ct_pthreads_init(int num_threads) {
+void ct_pthreads_init(const ct_env_var* env) {
+    int num_threads = atoi(ct_getenv(env, "CT_THREADS", "0"));
     ct_pthread_pool* pool = &g_ct_pthread_pool;
     pthread_attr_t attr;
     int i;

@@ -29,8 +29,9 @@ void ct_valgrind_cmd(const char* str) {
     g_ct_valgrind_cmd.stored_magic = STORED_MAGIC;
 }
 
-void ct_valgrind_init(int num_threads) {
-    (void)num_threads;
+void ct_shuffle_init(const ct_env_var* env);
+void ct_valgrind_init(const ct_env_var* env) {
+    ct_shuffle_init(env); /* pass $CT_RAND_SEED and $CT_RAND_REV */
 }
 
 void ct_valgrind_fini(void) {

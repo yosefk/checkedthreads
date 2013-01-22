@@ -14,13 +14,16 @@ typedef struct {
 } ct_env_var;
 
 /* env may be 0, in which case environment variables are obtained using getenv.
-   if env is not 0, then {0,0} is the sentinel.
+   if env is not 0, then {0,0} is the sentinel; environment variables not
+   specified in env are still looked up using getenv.
 
    environment variables:
 
-   $CT_SCHED: serial, shuffle, valgrind, openmp(default), tbb, pthreads.
-   $CT_THREADS: number of threads, including main (TODO: 0 should auto-config.)
+   $CT_SCHED: serial, shuffle, valgrind, openmp, tbb, pthreads.
+   $CT_THREADS: number of threads, including main; "0" means "a thread per core".
    $CT_VERBOSE: 2(print indexes), 1(print loops), 0(silent-default).
+   $CT_RAND_SEED: seed for schedulers randomizing order (shuffle & valgrind).
+   $CT_RAND_REV: reverse each random index sequence yielded by the given seed.
 
    note that the parallel schedulers such as openmp and tbb currently
    specify two things which are conceptually separate: the "threading platform"

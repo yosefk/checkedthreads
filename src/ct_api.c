@@ -70,7 +70,6 @@ const char* ct_default_sched() {
 }
 
 void ct_init(const ct_env_var* env) {
-    int num_threads = atoi(ct_getenv(env, "CT_THREADS", "0"));
     const char* default_sched = ct_default_sched();
     const char* sched = ct_getenv(env, "CT_SCHED", default_sched);
     g_ct_pimpl = ct_sched(sched);
@@ -83,7 +82,7 @@ void ct_init(const ct_env_var* env) {
        that is, with truly parallel schedulers. */
     g_ct_verbose = atoi(ct_getenv(env, "CT_VERBOSE", "0"));
 
-    g_ct_pimpl->imp_init(num_threads);
+    g_ct_pimpl->imp_init(env);
 
     if(g_ct_verbose) {
         printf("checkedthreads: initialized\n");

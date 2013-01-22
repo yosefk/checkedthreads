@@ -2,8 +2,8 @@
 
 #ifdef CT_OPENMP
 
-void ct_openmp_init(int num_threads) {
-    (void)num_threads;
+void ct_openmp_init(const ct_env_var* env) {
+    (void)env;
 }
 
 void ct_openmp_fini(void) {

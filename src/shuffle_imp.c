@@ -4,6 +4,8 @@
 /* TODO: add a seed */
 /* TODO: use local state instead of rand()'s global state. */
 
+int g_ct_random_reverse = 0;
+
 /* based on GNU std::random_shuffle */
 void ct_random_shuffle(int* p, int n) {
     int i;
@@ -23,11 +25,20 @@ int* ct_rand_perm(int n) {
         p[i] = i;
     }
     ct_random_shuffle(p, n);
+    if(g_ct_random_reverse) {
+        for(i=0; i<n/2; ++i) {
+            int tmp = p[i];
+            p[i] = p[n-i-1];
+            p[n-i-1] = tmp;
+        }
+    }
     return p;
 }
 
-void ct_shuffle_init(int num_threads) {
-    (void)num_threads;
+void ct_shuffle_init(const ct_env_var* env) {
+    /* TODO: do not use rand()! */
+    srand(atoi(ct_getenv(env, "CT_RAND_SEED", "12345")));
+    g_ct_random_reverse = atoi(ct_getenv(env, "CT_RAND_REV", "0"));
 }
 
 void ct_shuffle_fini(void) {
