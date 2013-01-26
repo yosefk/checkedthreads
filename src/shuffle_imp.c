@@ -44,10 +44,13 @@ void ct_shuffle_init(const ct_env_var* env) {
 void ct_shuffle_fini(void) {
 }
 
-void ct_shuffle_for(int n, ct_ind_func f, void* context) {
+void ct_shuffle_for(int n, ct_ind_func f, void* context, ct_canceller* c) {
     int* perm = ct_rand_perm(n);
     int i;
     for(i=0; i<n; ++i) {
+        if(c->cancelled) {
+            break;
+        }
         f(perm[i], context);
     }
     free(perm);
@@ -58,4 +61,5 @@ ct_imp g_ct_shuffle_imp = {
     &ct_shuffle_init,
     &ct_shuffle_fini,
     &ct_shuffle_for,
+    0, 0, 0, /* cancelling functions */
 };

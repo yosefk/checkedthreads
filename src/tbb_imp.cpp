@@ -20,20 +20,28 @@ void ctx_tbb_fini(void) {
 struct ctx_invoker {
     ct_ind_func f;
     void* context;
+    ct_canceller* canceller;
 
     void operator()(const tbb::blocked_range<int>& range) const {
         int begin = range.begin();
         int end = range.end();
         for(int i=begin; i<end; ++i) {
-            f(i, context);
+            if(canceller->cancelled) {
+                tbb::task::self().cancel_group_execution();
+                return;
+            }
+            else {
+                f(i, context);
+            }
         }
     }
 };
 
-void ctx_tbb_for(int n, ct_ind_func f, void* context) {
+void ctx_tbb_for(int n, ct_ind_func f, void* context, ct_canceller* c) {
     ctx_invoker invoker;
     invoker.f=f;
     invoker.context=context;
+    invoker.canceller=c;
 
     /* grain_size=1 [it's blocked_range's default but why take chances...]
        and simple_partitioner which presumably uses "chunk size=grain size"
@@ -55,6 +63,7 @@ ct_imp g_ct_tbb_imp = {
     &ctx_tbb_init,
     &ctx_tbb_fini,
     &ctx_tbb_for,
+    0, 0, 0, /* cancelling functions */
 };
 
 #else

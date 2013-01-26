@@ -7,3 +7,12 @@ usec_t curr_usec() {
     gettimeofday(&tv,0);
     return tv.tv_usec + tv.tv_sec*1000000ULL;
 }
+
+#ifdef __cplusplus
+template<class F>
+usec_t usecs(const F& f) {
+    usec_t start = curr_usec();
+    f();
+    return curr_usec() - start;
+}
+#endif

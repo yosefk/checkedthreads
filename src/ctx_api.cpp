@@ -8,12 +8,12 @@ void ctx_for_ind_func(int ind, void* context)
     f(ind);
 }
 
-void ctx_for(int n, const ctx_ind_func& f)
+void ctx_for(int n, const ctx_ind_func& f, ct_canceller* c)
 {
-    ct_for(n, ctx_for_ind_func, (void*)&f);
+    ct_for(n, ctx_for_ind_func, (void*)&f, c);
 }
 
-void ctx_invoke_(ctx_task_node_* head)
+void ctx_invoke_(ctx_task_node_* head, ct_canceller* c)
 {
     const int max_local_tasks = 128;
     ctx_task_func* local_tasks[max_local_tasks]; 
@@ -39,7 +39,7 @@ void ctx_invoke_(ctx_task_node_* head)
         ++n;
     }
 
-    ctx_for(n, [=](int i) { (*tasks[i])(); });
+    ctx_for(n, [=](int i) { (*tasks[i])(); }, c);
 
     if(tasks != local_tasks) {
         free(tasks);

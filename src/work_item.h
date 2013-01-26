@@ -10,6 +10,7 @@ typedef struct {
     volatile int ref_cnt;
     ct_ind_func f;
     void* context;
+    ct_canceller* volatile canceller;
 } ct_work_item;
 
 /* returns when next_ind reaches or exceeds n - all work was already yanked.

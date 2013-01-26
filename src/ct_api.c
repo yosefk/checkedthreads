@@ -22,6 +22,7 @@ ct_imp* g_ct_imps[] = {
 
 ct_imp* g_ct_pimpl;
 int g_ct_verbose;
+ct_canceller* g_ct_default_canceller;
 
 const char* ct_getenv(const ct_env_var* env, const char* name, const char* default_value) {
     int i=0;
@@ -84,12 +85,15 @@ void ct_init(const ct_env_var* env) {
 
     g_ct_pimpl->imp_init(env);
 
+    g_ct_default_canceller = ct_alloc_canceller();
+
     if(g_ct_verbose) {
         printf("checkedthreads: initialized\n");
     }
 }
 
 void ct_fini(void) {
+    ct_free_canceller(g_ct_default_canceller);
     g_ct_pimpl->imp_fini();
     g_ct_pimpl = 0;
     if(g_ct_verbose) {
@@ -97,18 +101,43 @@ void ct_fini(void) {
     }
 }
 
-void ct_dispatch_task(int index, void* context)
-{
+ct_canceller* ct_alloc_canceller(void) {
+    ct_canceller* c = (ct_canceller*)malloc(sizeof(ct_canceller));
+    c->cancelled = 0;
+    if(g_ct_pimpl->imp_canceller_init) {
+        g_ct_pimpl->imp_canceller_init(c);
+    }
+    return c;
+}
+
+void ct_free_canceller(ct_canceller* c) {
+    if(g_ct_pimpl->imp_canceller_fini) {
+        g_ct_pimpl->imp_canceller_fini(c);
+    }
+    free(c);
+}
+
+void ct_cancel(ct_canceller* c) {
+    c->cancelled = 1;
+    if(g_ct_pimpl->imp_cancel) {
+        g_ct_pimpl->imp_cancel(c);
+    }
+}
+
+int ct_cancelled(ct_canceller* c) {
+    return c->cancelled;
+}
+
+void ct_dispatch_task(int index, void* context) {
     const ct_task* tasks = (const ct_task*)context;
     const ct_task* t = tasks + index;
     t->func(t->arg);
 }
 
-void ct_invoke(const ct_task tasks[])
-{
+void ct_invoke(const ct_task tasks[], ct_canceller* c) {
     int i;
     for(i=0; tasks[i].func; ++i);
-    ct_for(i, ct_dispatch_task, (void*)tasks);
+    ct_for(i, ct_dispatch_task, (void*)tasks, c);
 }
 
 typedef struct {
@@ -122,7 +151,15 @@ void ct_verbose_ind_func(int index, void* context) {
     wc->next_func(index, wc->next_context);
 }
 
-void ct_for(int n, ct_ind_func f, void* context) {
+void ct_for(int n, ct_ind_func f, void* context, ct_canceller* c) {
+    if(c == 0) {
+        c = g_ct_default_canceller;
+    }
+    else {
+        if(c->cancelled) {
+            return;
+        }
+    }
     if(g_ct_verbose>0) {
         /* TODO: add task name */
         ct_wrapped_func_context wc;
@@ -133,10 +170,10 @@ void ct_for(int n, ct_ind_func f, void* context) {
             f = ct_verbose_ind_func;
             context = &wc;
         }
-        g_ct_pimpl->imp_for(n, f, context);
+        g_ct_pimpl->imp_for(n, f, context, c);
         printf("checkedthreads: ct_for(%d) ended\n",n);
     }
     else {
-        g_ct_pimpl->imp_for(n, f, context);
+        g_ct_pimpl->imp_for(n, f, context, c);
     }
 }

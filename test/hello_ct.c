@@ -41,7 +41,7 @@ int main() {
     int array[N]={0};
 
     ct_init(0);
-    ct_for(N, index_callback, array);
+    ct_for(N, index_callback, array, 0);
     print_and_check_results(array);
     ct_fini();
     return 0;

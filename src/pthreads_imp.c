@@ -120,7 +120,7 @@ void ct_pthreads_fini(void) {
     free(pool->threads);
 }
 
-void ct_pthreads_for(int n, ct_ind_func f, void* context) {
+void ct_pthreads_for(int n, ct_ind_func f, void* context, ct_canceller* c) {
     ct_pthread_pool* pool = &g_ct_pthread_pool;
     ct_locked_queue* q = &pool->q;
     ct_work_item* item;
@@ -143,6 +143,7 @@ void ct_pthreads_for(int n, ct_ind_func f, void* context) {
     item->f = f;
     item->context = context;
     item->ref_cnt = reps + 1;
+    item->canceller = c;
 
     /* try to enqueue the item, and do some work while that fails */
     while(!ct_locked_enqueue(q, item, reps)) {
@@ -169,6 +170,8 @@ void ct_pthreads_for(int n, ct_ind_func f, void* context) {
         ct_pthreads_dequeue_work(&pool->q);
     }
 
+    item->canceller = 0; /* the canceller may be freed after we quit, so it shouldn't be accessed any more */
+
     if(ATOMIC_FETCH_THEN_DECR(&item->ref_cnt, 1) == 1) {
         free(item);
     }
@@ -179,6 +182,7 @@ ct_imp g_ct_pthreads_imp = {
     &ct_pthreads_init,
     &ct_pthreads_fini,
     &ct_pthreads_for,
+    0, 0, 0, /* cancelling functions */
 };
 
 #else

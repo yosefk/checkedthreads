@@ -38,6 +38,16 @@ typedef struct {
 void ct_init(const ct_env_var* env);
 void ct_fini(void);
 
+/* cancelling: if ct_for/ct_invoke is passed a canceller, then
+   ct_cancel() can be used to cancel that for/invoke. a single
+   canceller can be passed to many fors/invokes. */
+typedef struct ct_canceller ct_canceller;
+
+ct_canceller* ct_alloc_canceller(void);
+void ct_free_canceller(ct_canceller* c);
+void ct_cancel(ct_canceller* c);
+int ct_cancelled(ct_canceller* c);
+
 /* invoke a set of tasks - make N async function calls */
 typedef void (*ct_task_func)(void* arg);
 typedef struct {
@@ -45,11 +55,11 @@ typedef struct {
     void* arg;
 } ct_task;
 /* a task with func==0 is the sentinel */
-void ct_invoke(const ct_task tasks[]);
+void ct_invoke(const ct_task tasks[], ct_canceller* c);
 
 /* N async function calls f(0) ... f(n-1) */
 typedef void (*ct_ind_func)(int ind, void* context);
-void ct_for(int n, ct_ind_func f, void* context);
+void ct_for(int n, ct_ind_func f, void* context, ct_canceller* c);
 
 #ifdef __cplusplus
 } /* extern "C" */
@@ -60,7 +70,7 @@ void ct_for(int n, ct_ind_func f, void* context);
 #include <functional>
 
 typedef std::function<void(int)> ctx_ind_func;
-void ctx_for(int n, const ctx_ind_func& f);
+void ctx_for(int n, const ctx_ind_func& f, ct_canceller* c=0);
 
 /* helpers for ctx_invoke... */
 typedef std::function<void(void)> ctx_task_func;
@@ -68,7 +78,7 @@ struct ctx_task_node_ {
     ctx_task_func* func;
     ctx_task_node_* next;
 };
-void ctx_invoke_(ctx_task_node_* head);
+void ctx_invoke_(ctx_task_node_* head, ct_canceller* c=0);
 template<typename First, typename... Rest>
 void ctx_invoke_(ctx_task_node_* head, const First& first, Rest... rest) {
     ctx_task_func func(first);
