@@ -282,14 +282,24 @@ typedef struct {
     volatile char payload[MAX_CMD];
 } ct_cmd;
 
-ct_cmd* g_ct_last_cmd = 0; /* ignore writes to cmd */
+static ct_cmd* g_ct_last_cmd = 0; /* ignore writes to cmd */
 
-/* 16M of 16M pages (or 2^24 pages of 2^24 bytes each)
+/* 3-level page table; up to 2^36 pages of 2^12 bytes each,
+   organized into levels of up to 2^12 entries each.
    should work fine for virtual addresses of up to 48 bits. */
-#define PAGE_LSBS 24
-#define PAGE_MSBS 24
-#define PAGE_SIZE (1<<PAGE_LSBS)
-#define NUM_PAGES (1<<PAGE_MSBS)
+#define PAGE_BITS 12
+#define PAGE_SIZE (1<<PAGE_BITS)
+#define L1_BITS 12
+#define NUM_PAGES (1<<L1_BITS)
+#define L2_BITS 12
+#define NUM_L1_PAGETABS (1<<L2_BITS)
+#define L3_BITS 12
+#define NUM_L2_PAGETABS (1<<L3_BITS)
+
+#define L2_PAGETAB(addr) ((((UInt)addr >> 24) >> 12) & 0xfff)
+#define L1_PAGETAB(addr) (((UInt)addr >> 24) & 0xfff)
+#define PAGE(addr) (((UInt)addr >> 12) & 0xfff)
+#define BYTE_IN_PAGE(addr) ((UInt)addr & 0xfff)
 
 typedef struct ct_page_ {
     /* 0 means "owned by none" (so is OK to access).
@@ -301,37 +311,100 @@ typedef struct ct_page_ {
     int index;
 } ct_page;
 
+typedef struct ct_pagetab_L1_ {
+    ct_page* pages[NUM_PAGES];
+    ct_page* last_alloc_page; /* head of allocated pages list */
+    struct ct_pagetab_L1_* prev_alloc_pagetab_L1;
+} ct_pagetab_L1;
+
+typedef struct ct_pagetab_L2_ {
+    ct_pagetab_L1* pagetabs_L1[NUM_L1_PAGETABS];
+    ct_pagetab_L1* last_alloc_pagetab_L1;
+    struct ct_pagetab_L2_* prev_alloc_pagetab_L2;
+} ct_pagetab_L2;
+
+typedef struct ct_pagetab_L3_ {
+    ct_pagetab_L2* pagetabs_L2[NUM_L2_PAGETABS];
+    ct_pagetab_L2* last_alloc_pagetab_L2;
+} ct_pagetab_L3;
+
+typedef struct ct_pagetab_stack_ {
+    ct_pagetab_L3* pagetab_L3;
+    struct ct_pagetab_stack_* next_stack_entry;
+} ct_pagetab_stack;
+
 static Bool g_ct_active = False;
 static Int g_ct_curr_thread = 0;
-static ct_page* g_ct_pagetab[NUM_PAGES] = {0};
-static ct_page* g_ct_last_alloc_page = 0; /* head of the allocated pages list */
+static ct_pagetab_stack* g_ct_pagetab_stack;
+/* FIXME: make a pointer and stuff */
+static ct_pagetab_L3 g_ct_pagetab_L3 = {{0},0}; /* top of the pagetab stack */
 static char* g_ct_stackbot = 0;
 static char* g_ct_stackend = 0;
 
 static ct_page* ct_get_page(Addr a)
 {
-    Int index = (Int)a >> PAGE_LSBS;
-    ct_page* page = g_ct_pagetab[index];
+    ct_pagetab_L3* pagetab_L3 = &g_ct_pagetab_L3;
+    ct_pagetab_L2* pagetab_L2;
+    ct_pagetab_L1* pagetab_L1;
+    ct_page* page;
+
+    UInt pt2_index = L2_PAGETAB(a);
+    pagetab_L2 = pagetab_L3->pagetabs_L2[pt2_index];
+    if(pagetab_L2 == 0) {
+        pagetab_L2 = (ct_pagetab_L2*)VG_(calloc)("pagetab_L2", 1, sizeof(ct_pagetab_L2));
+        pagetab_L2->prev_alloc_pagetab_L2 = pagetab_L3->last_alloc_pagetab_L2; 
+        pagetab_L3->last_alloc_pagetab_L2 = pagetab_L2;
+        pagetab_L3->pagetabs_L2[pt2_index] = pagetab_L2;
+    }
+
+    UInt pt1_index = L1_PAGETAB(a);
+    pagetab_L1 = pagetab_L2->pagetabs_L1[pt1_index];
+    if(pagetab_L1 == 0) {
+        pagetab_L1 = (ct_pagetab_L1*)VG_(calloc)("pagetab_L1", 1, sizeof(ct_pagetab_L1));
+        pagetab_L1->prev_alloc_pagetab_L1 = pagetab_L2->last_alloc_pagetab_L1;
+        pagetab_L2->last_alloc_pagetab_L1 = pagetab_L1;
+        pagetab_L2->pagetabs_L1[pt1_index] = pagetab_L1;
+    }
+    
+    Int page_index = PAGE(a);
+    page = pagetab_L1->pages[page_index];
     if(page == 0) {
         page = (ct_page*)VG_(calloc)("page", 1, sizeof(ct_page));
-        page->prev_alloc_page = g_ct_last_alloc_page;
-        page->index = index;
-        g_ct_last_alloc_page = page;
-        g_ct_pagetab[index] = page;
+        page->prev_alloc_page = pagetab_L1->last_alloc_page;
+        pagetab_L1->last_alloc_page = page;
+        pagetab_L1->pages[page_index] = page;
     }
     return page;
 }
 
 static void ct_clear_pagetab(void)
 {
-    ct_page* page = g_ct_last_alloc_page;
-    while(page) {
-        ct_page* prev = page->prev_alloc_page;
-        g_ct_pagetab[page->index] = 0;
-        VG_(free)(page);
-        page = prev;
+    ct_pagetab_L3* pagetab_L3 = &g_ct_pagetab_L3;
+    ct_pagetab_L2* pagetab_L2 = pagetab_L3->last_alloc_pagetab_L2;
+    /* free all L2 pages */
+    while(pagetab_L2) {
+        ct_pagetab_L2* prev_pagetab_L2 = pagetab_L2->prev_alloc_pagetab_L2;
+        /* free all L1 pages */
+        ct_pagetab_L1* pagetab_L1 = pagetab_L2->last_alloc_pagetab_L1;
+        while(pagetab_L1) {
+            ct_pagetab_L1* prev_pagetab_L1 = pagetab_L1->prev_alloc_pagetab_L1;
+            /* free all pages */
+            ct_page* page = pagetab_L1->last_alloc_page;
+            while(page) {
+                ct_page* prev_page = page->prev_alloc_page;
+                VG_(free)(page);
+                page = prev_page;
+            }
+            /* free the L1 pagetab */
+            VG_(free)(pagetab_L1);
+            pagetab_L1 = prev_pagetab_L1;
+        }
+        /* free the L2 pagetab */
+        VG_(free)(pagetab_L2);
+        pagetab_L2 = prev_pagetab_L2;
     }
-    g_ct_last_alloc_page = 0;
+    VG_(memset)(pagetab_L3->pagetabs_L2, 0, sizeof(pagetab_L3->pagetabs_L2));
+    pagetab_L3->last_alloc_pagetab_L2 = 0;
 }
 
 static char* ct_stack_end(void)
@@ -367,8 +440,8 @@ static inline void ct_on_access(Addr base, SizeT size, Bool store)
     for(i=0; i<size; ++i) {
         Addr addr = base+i;
         ct_page* page = ct_get_page(addr);
-        int page_index = (Int)addr & ((1<<PAGE_LSBS)-1);
-        int owner = page->owning_thread[page_index];
+        int index_in_page = BYTE_IN_PAGE(addr);
+        int owner = page->owning_thread[index_in_page];
         if(owner && owner != g_ct_curr_thread) {
             if(!ct_suppress(addr)) {
                 VG_(printf)("checkedthreads: error - thread %d accessed %p [%p,%d], owned by %d\n",
@@ -381,7 +454,7 @@ static inline void ct_on_access(Addr base, SizeT size, Bool store)
         }
         if(store) {
             /* update the owner */
-            page->owning_thread[page_index] = g_ct_curr_thread;
+            page->owning_thread[index_in_page] = g_ct_curr_thread;
         }
     }
 }
