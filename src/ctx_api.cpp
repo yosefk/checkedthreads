@@ -2,19 +2,21 @@
 #include <cstdlib>
 #include <cstring>
 
-void ctx_for_ind_func(int ind, void* context)
-{
-    const ctx_ind_func& f = *(ctx_ind_func*)context;
-    f(ind);
+void ctx_for_ind_func(int ind, void* context) {
+    ctx_ind_func* f = (ctx_ind_func*)context;
+    f->on_index(ind);
 }
 
-void ctx_for(int n, const ctx_ind_func& f, ct_canceller* c)
-{
+void ctx_for_(int n, const ctx_ind_func& f, ct_canceller* c) {
     ct_for(n, ctx_for_ind_func, (void*)&f, c);
 }
 
-void ctx_invoke_(ctx_task_node_* head, ct_canceller* c)
-{
+void ctx_invoke_ind_func(int ind, void* context) {
+    ctx_task_func** tasks = (ctx_task_func**)context;
+    tasks[ind]->run_task();
+}
+
+void ctx_invoke_(ctx_task_node_* head, ct_canceller* c) {
     const int max_local_tasks = 128;
     ctx_task_func* local_tasks[max_local_tasks]; 
     ctx_task_func** tasks = local_tasks;
@@ -39,7 +41,7 @@ void ctx_invoke_(ctx_task_node_* head, ct_canceller* c)
         ++n;
     }
 
-    ctx_for(n, [=](int i) { (*tasks[i])(); }, c);
+    ct_for(n, ctx_invoke_ind_func, tasks, c);
 
     if(tasks != local_tasks) {
         free(tasks);

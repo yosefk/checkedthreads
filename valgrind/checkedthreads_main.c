@@ -301,14 +301,23 @@ static ct_cmd* g_ct_last_cmd = 0; /* ignore writes to cmd */
 #define PAGE(addr) (((UInt)addr >> 12) & 0xfff)
 #define BYTE_IN_PAGE(addr) ((UInt)addr & 0xfff)
 
+/* owning_thread[] is a summary of all levels up to this one; if
+   owning_thread[i]==0, perhaps indeed the location is owned by nobody -
+   and perhaps it's owned by a thread who spawned the current for.
+
+   dirty_owners[i], if non-zero, is always equal to owning_thread[i]
+   (since they're updated simultaneously), and it means that the ownership
+   was obtained in the current for, and must be committed to the spawner's
+   page table when this for quits. */
 typedef struct ct_page_ {
     /* 0 means "owned by none" (so is OK to access).
        the rest means "owned by i" (so is OK to access for i only.) */
     unsigned char owning_thread[PAGE_SIZE];
+    unsigned char* dirty_owners; /* PAGE_SIZE entries, when allocated. */
+    Addr creating_address; /* we could keep the base address as well... */
     /* we keep a linked a list of allocated pages so as to not have
        to traverse all indexes to find allocated pages. */
     struct ct_page_* prev_alloc_page;
-    int index;
 } ct_page;
 
 typedef struct ct_pagetab_L1_ {
@@ -328,22 +337,45 @@ typedef struct ct_pagetab_L3_ {
     ct_pagetab_L2* last_alloc_pagetab_L2;
 } ct_pagetab_L3;
 
-typedef struct ct_pagetab_stack_ {
+typedef struct ct_pagetab_stack_entry_ {
     ct_pagetab_L3* pagetab_L3;
-    struct ct_pagetab_stack_* next_stack_entry;
-} ct_pagetab_stack;
+    int thread;
+    int active;
+    char* stackbot;
+    struct ct_pagetab_stack_entry_* next_stack_entry;
+} ct_pagetab_stack_entry;
 
 static Bool g_ct_active = False;
-static Int g_ct_curr_thread = 0;
-static ct_pagetab_stack* g_ct_pagetab_stack;
-/* FIXME: make a pointer and stuff */
-static ct_pagetab_L3 g_ct_pagetab_L3 = {{0},0}; /* top of the pagetab stack */
+static ct_pagetab_stack_entry* g_ct_pagetab_stack = 0;
+static ct_pagetab_L3* g_ct_pagetab_L3 = 0; /* top/curr pagetab */
+static Int g_ct_curr_thread = 0; /* top/curr thread */
 static char* g_ct_stackbot = 0;
 static char* g_ct_stackend = 0;
 
-static ct_page* ct_get_page(Addr a)
+static ct_page* ct_get_page(Addr a, ct_pagetab_L3* pagetab_L3, int readonly_pagetab);
+
+static void ct_init_ownership(ct_page* page)
 {
-    ct_pagetab_L3* pagetab_L3 = &g_ct_pagetab_L3;
+    if(g_ct_pagetab_stack == 0 || g_ct_pagetab_stack->pagetab_L3 == 0) {
+        return;
+    }
+    ct_page* spawner_page = ct_get_page(page->creating_address, g_ct_pagetab_stack->pagetab_L3, 1);
+    if(spawner_page == 0) {
+        return;
+    }
+    int spawner_thread = g_ct_pagetab_stack->thread;
+    int i;
+    for(i=0; i<PAGE_SIZE; ++i) {
+        int spawner_owner = spawner_page->owning_thread[i];
+        if(spawner_owner != spawner_thread) {
+            page->owning_thread[i] = spawner_owner;
+        }
+        /* otherwise, don't copy ownership - it's OK to access that location */
+    }
+}
+
+static ct_page* ct_get_page(Addr a, ct_pagetab_L3* pagetab_L3, int readonly_pagetab)
+{
     ct_pagetab_L2* pagetab_L2;
     ct_pagetab_L1* pagetab_L1;
     ct_page* page;
@@ -351,6 +383,7 @@ static ct_page* ct_get_page(Addr a)
     UInt pt2_index = L2_PAGETAB(a);
     pagetab_L2 = pagetab_L3->pagetabs_L2[pt2_index];
     if(pagetab_L2 == 0) {
+        if(readonly_pagetab) return 0;
         pagetab_L2 = (ct_pagetab_L2*)VG_(calloc)("pagetab_L2", 1, sizeof(ct_pagetab_L2));
         pagetab_L2->prev_alloc_pagetab_L2 = pagetab_L3->last_alloc_pagetab_L2; 
         pagetab_L3->last_alloc_pagetab_L2 = pagetab_L2;
@@ -360,6 +393,7 @@ static ct_page* ct_get_page(Addr a)
     UInt pt1_index = L1_PAGETAB(a);
     pagetab_L1 = pagetab_L2->pagetabs_L1[pt1_index];
     if(pagetab_L1 == 0) {
+        if(readonly_pagetab) return 0;
         pagetab_L1 = (ct_pagetab_L1*)VG_(calloc)("pagetab_L1", 1, sizeof(ct_pagetab_L1));
         pagetab_L1->prev_alloc_pagetab_L1 = pagetab_L2->last_alloc_pagetab_L1;
         pagetab_L2->last_alloc_pagetab_L1 = pagetab_L1;
@@ -369,17 +403,56 @@ static ct_page* ct_get_page(Addr a)
     Int page_index = PAGE(a);
     page = pagetab_L1->pages[page_index];
     if(page == 0) {
+        if(readonly_pagetab) return 0;
         page = (ct_page*)VG_(calloc)("page", 1, sizeof(ct_page));
+        page->creating_address = a;
         page->prev_alloc_page = pagetab_L1->last_alloc_page;
         pagetab_L1->last_alloc_page = page;
         pagetab_L1->pages[page_index] = page;
+
+        ct_init_ownership(page);
     }
     return page;
 }
 
-static void ct_clear_pagetab(void)
+static void ct_push_pagetab(void)
 {
-    ct_pagetab_L3* pagetab_L3 = &g_ct_pagetab_L3;
+    ct_pagetab_stack_entry* entry = (ct_pagetab_stack_entry*)VG_(calloc)("pagetab_stack_entry", 1, sizeof(ct_pagetab_stack_entry));
+
+    entry->pagetab_L3 = g_ct_pagetab_L3;
+    entry->thread = g_ct_curr_thread;
+    entry->active = g_ct_active;
+    entry->stackbot = g_ct_stackbot;
+    entry->next_stack_entry = g_ct_pagetab_stack;
+
+    g_ct_pagetab_stack = entry;
+
+    g_ct_pagetab_L3 = (ct_pagetab_L3*)VG_(calloc)("pagetab_L3", 1, sizeof(ct_pagetab_L3));
+}
+
+static void ct_commit_ownership(ct_page* page)
+{
+    if(!page->dirty_owners || g_ct_pagetab_stack == 0 || g_ct_pagetab_stack->pagetab_L3 == 0) {
+        return;
+    }
+    ct_page* spawner_page = ct_get_page(page->creating_address, g_ct_pagetab_stack->pagetab_L3, 0);
+    if(!spawner_page->dirty_owners) {
+        spawner_page->dirty_owners = VG_(calloc)("dirty_owners", 1, PAGE_SIZE);
+    }
+    int curr_thread = g_ct_curr_thread;
+    int i;
+    for(i=0; i<PAGE_SIZE; ++i) {
+        /* no matter who owned the location in this loop, the location now
+           is owned by the loop spawner - "joining" means "as if we never forked" */
+        if(page->dirty_owners[i]) {
+            spawner_page->dirty_owners[i] = curr_thread;
+        }
+    }
+}
+
+static void ct_pop_pagetab(void)
+{
+    ct_pagetab_L3* pagetab_L3 = g_ct_pagetab_L3;
     ct_pagetab_L2* pagetab_L2 = pagetab_L3->last_alloc_pagetab_L2;
     /* free all L2 pages */
     while(pagetab_L2) {
@@ -392,6 +465,10 @@ static void ct_clear_pagetab(void)
             ct_page* page = pagetab_L1->last_alloc_page;
             while(page) {
                 ct_page* prev_page = page->prev_alloc_page;
+                if(page->dirty_owners) {
+                    ct_commit_ownership(page);
+                    VG_(free)(page->dirty_owners);
+                }
                 VG_(free)(page);
                 page = prev_page;
             }
@@ -403,8 +480,16 @@ static void ct_clear_pagetab(void)
         VG_(free)(pagetab_L2);
         pagetab_L2 = prev_pagetab_L2;
     }
-    VG_(memset)(pagetab_L3->pagetabs_L2, 0, sizeof(pagetab_L3->pagetabs_L2));
-    pagetab_L3->last_alloc_pagetab_L2 = 0;
+    VG_(free)(pagetab_L3);
+
+    g_ct_pagetab_L3 = g_ct_pagetab_stack->pagetab_L3;
+    g_ct_curr_thread = g_ct_pagetab_stack->thread;
+    g_ct_active = g_ct_pagetab_stack->active;
+    g_ct_stackbot = g_ct_pagetab_stack->stackbot;
+
+    ct_pagetab_stack_entry* entry = g_ct_pagetab_stack->next_stack_entry;
+    VG_(free)(g_ct_pagetab_stack);
+    g_ct_pagetab_stack = entry;
 }
 
 static char* ct_stack_end(void)
@@ -437,12 +522,14 @@ static Bool ct_suppress(Addr addr)
 static inline void ct_on_access(Addr base, SizeT size, Bool store)
 {
     SizeT i;
+    ct_pagetab_L3* pagetab_L3 = g_ct_pagetab_L3;
+    int curr_thread = g_ct_curr_thread;
     for(i=0; i<size; ++i) {
         Addr addr = base+i;
-        ct_page* page = ct_get_page(addr);
+        ct_page* page = ct_get_page(addr, pagetab_L3, 0);
         int index_in_page = BYTE_IN_PAGE(addr);
         int owner = page->owning_thread[index_in_page];
-        if(owner && owner != g_ct_curr_thread) {
+        if(owner && owner != curr_thread) {
             if(!ct_suppress(addr)) {
                 VG_(printf)("checkedthreads: error - thread %d accessed %p [%p,%d], owned by %d\n",
                         g_ct_curr_thread-1,
@@ -454,7 +541,11 @@ static inline void ct_on_access(Addr base, SizeT size, Bool store)
         }
         if(store) {
             /* update the owner */
-            page->owning_thread[index_in_page] = g_ct_curr_thread;
+            page->owning_thread[index_in_page] = curr_thread;
+            if(!page->dirty_owners) {
+                page->dirty_owners = (unsigned char*)VG_(calloc)("dirty_owners", 1, PAGE_SIZE);
+            }
+            page->dirty_owners[index_in_page] = curr_thread;
         }
     }
 }
@@ -488,11 +579,13 @@ static void ct_process_command(ct_cmd* cmd)
     }
     if(ct_str_is(cmd->payload, "begin_for")) {
         if(clo_print_commands) VG_(printf)("begin_for\n");
+        ct_push_pagetab();
     }
     else if(ct_str_is(cmd->payload, "end_for")) {
         if(clo_print_commands) VG_(printf)("end_for\n");
-        ct_clear_pagetab();
-        g_ct_curr_thread = 0;
+        ct_pop_pagetab();
+        if(clo_print_commands && g_ct_active) VG_(printf)("stackbot restored to %p\n",
+                (void*)g_ct_stackbot);
     }
     else if(ct_str_is(cmd->payload, "iter")) {
         if(clo_print_commands) VG_(printf)("iter %d\n", ct_cmd_int(cmd, 4));

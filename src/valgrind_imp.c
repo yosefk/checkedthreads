@@ -42,7 +42,6 @@ int* ct_rand_perm(int n);
 void ct_valgrind_for_loop(int n, ct_ind_func f, void* context, ct_canceller* c) {
     int i;
     int* perm = ct_rand_perm(n);
-    ct_valgrind_cmd("begin_for");
 
     for(i=0; i<n; ++i) {
         int ind = perm[i];
@@ -60,7 +59,6 @@ void ct_valgrind_for_loop(int n, ct_ind_func f, void* context, ct_canceller* c) 
         ct_valgrind_int(4, ind);
         ct_valgrind_cmd("done");
     }
-    ct_valgrind_cmd("end_for");
     free(perm);
 }
 
@@ -70,10 +68,14 @@ volatile ct_imp_for_func g_ct_valgrind_for = &ct_valgrind_for_loop;
 /* under Valgrind, loops run to completion even if canceled */
 void ct_valgrind_for(int n, ct_ind_func f, void* context, ct_canceller* c) {
     volatile int local=0;
+    ct_valgrind_cmd("begin_for");
+
     ct_valgrind_ptr(8, &local);
     ct_valgrind_cmd("stackbot");
 
     (*g_ct_valgrind_for)(n,f,context,c);
+
+    ct_valgrind_cmd("end_for");
 }
 
 ct_imp g_ct_valgrind_imp = {

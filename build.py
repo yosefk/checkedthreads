@@ -31,7 +31,6 @@ srcsc = 'ct_api.c serial_imp.c pthreads_imp.c openmp_imp.c shuffle_imp.c valgrin
 srcsxx = 'ctx_api.cpp tbb_imp.cpp'.split()
 libc = 'checkedthreads'
 libxx = 'checkedthreads++'
-tests = 'hello_ct.c hello_ctx.cpp nested.cpp sort.cpp'.split()
 
 # utilities
 ###########
@@ -94,11 +93,6 @@ def build():
                 print '\nbuilding','lib'+singlelib
                 compile('stubs_%s.c'%feature.lower())
                 link(singlelib,stub_out_all_but(feature,srcs+more))
-    print '\nbuilding tests'
-    for test in tests:
-        if test.endswith('.cpp') and 'C++11' not in enabled:
-            continue
-        buildtest(test)
 
 def update(cmd,outputs=[],inputs=[]):
     '''TODO: check inputs & outputs timestamps'''
@@ -141,13 +135,14 @@ def link(libname,srcs):
     #update('g++ -o lib/lib%s.so -shared -fPIC %s'%(so,' '.join(objs)),[so],objs)
     update('ar cr %s %s'%(lib,' '.join(objs)),[lib],objs)
 
-def buildtest(test):
-    name = test.split('.')[0]
+def buildtest(test,lib_postfix=''):
+    name = test.split('.')[0]+lib_postfix
     bin = 'bin/'+name
     src = 'test/'+test
     cc = compiler(test)
-    lib = {'gcc':libc,'g++':libxx}[cc]
+    lib = {'gcc':libc,'g++':libxx}[cc]+lib_postfix
     update('%s %s -o %s lib/lib%s.a -I include %s'%(cc,src,bin,lib,all_enabled('linker_flags')),[bin],[src])
+    return name
 
 if __name__ == '__main__':
     build()

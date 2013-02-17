@@ -9,7 +9,7 @@ void b(void*) { printf("b\n"); }
 
 #define MIN_PAR (1024*32)
 #define PAR
-const int N = 1024*1024*16;
+int N = 1024*1024*16;
 
 void merge(int numbers[], int temp[], int left, int mid, int right)
 {
@@ -131,8 +131,11 @@ void print_and_check_results(int array[]) {
         }
     }
 }
-int main()
+int main(int argc, char** argv)
 {
+    if(argc>1) {
+        N = atoi(argv[1]);
+    }
     ct_init(0);
 #if 0
     ct_task tasks[] = {
@@ -167,6 +170,7 @@ int main()
             case 0: quicksort(nums, nums+N); break;
             case 1: mergeSort(nums, new int[N], N); break;
             case 2: tbb::parallel_sort(nums, nums+N); break;
+            default: break;
         };
         unsigned long long usec_finish = curr_usec();
         printf("%s: %f seconds\n", descr[t], (usec_finish - usec_start)/1000000.);

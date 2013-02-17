@@ -10,12 +10,12 @@ import sys
 import build
 import commands
 
-tests = 'bug.cpp'.split() # FIXME: 'nested.cpp grain.cpp acc.cpp bugs.cpp cancel.cpp sort.cpp'.split()
+tests = 'bug.cpp nested.cpp grain.cpp acc.cpp bugs.cpp cancel.cpp sort.cpp'.split()
 
 with_cpp = 'C++11' in build.enabled
 with_pthreads = 'pthreads' in build.enabled
-with_openmp = 'openmp' in build.enabled
-with_tbb = 'tbb' in build.enabled
+with_openmp = 'OpenMP' in build.enabled
+with_tbb = 'TBB' in build.enabled
 
 print '\nbuilding tests'
 
@@ -37,7 +37,7 @@ if with_cpp:
 for test in tests:
     if test.endswith('.cpp') and not with_cpp:
         continue
-    build.buildtest(test)
+    buildtest(test)
 
 scheds = 'serial shuffle valgrind openmp tbb pthreads'.split()
 # remove schedulers which we aren't configured to support
@@ -50,9 +50,9 @@ def fail(command):
     print ' ',command,'FAILED'
     failed.append(command)
 
-def runtest(name,expected_status=0,expected_output=None,**env):
+def runtest(name,args='',expected_status=0,expected_output=None,**env):
     envstr=' '.join(['%s=%s'%(n,v) for n,v in env.items()])
-    command = 'env %s ./bin/%s'%(envstr,name)
+    command = 'env %s ./bin/%s %s'%(envstr,name,args)
     return runcommand(command,expected_status,expected_output)
 
 def runcommand(command,expected_status=0,expected_output=None):
@@ -104,6 +104,14 @@ if not ((loc1 in o1 and loc2 in o2) or \
     fail(c2)
 elif verbose:
     print ' ','bug found when running either of the random orders'
+
+for test in built:
+    if test=='bug' or test.startswith('hello'):
+        continue
+    if test == 'sort':
+        runtest(test,args=str(1024*1024))
+    else:
+        runtest(test)
 
 if failed:
     print 'FAILED:'
