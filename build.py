@@ -83,7 +83,8 @@ def build():
         print '\nbuilding','lib'+lib
         for src in srcs:
             compile(src)
-        link(lib,srcs+more)
+        for shared in (True,False):
+            link(lib,srcs+more,shared)
         # single-scheduler libraries
         for feature in ['OpenMP','TBB','pthreads']:
             if feature in enabled:
@@ -92,7 +93,8 @@ def build():
                 singlelib = lib + '_' + feature.lower()
                 print '\nbuilding','lib'+singlelib
                 compile('stubs_%s.c'%feature.lower())
-                link(singlelib,stub_out_all_but(feature,srcs+more))
+                for shared in (True,False):
+                    link(singlelib,stub_out_all_but(feature,srcs+more),shared)
 
 def update(cmd,outputs=[],inputs=[]):
     '''TODO: check inputs & outputs timestamps'''
@@ -127,13 +129,16 @@ def compiler(fname):
 def compile(fname):
     src = 'src/'+fname
     obj = 'obj/'+fname+'.o'
-    update('%s -c %s -o %s -I include'%(compiler(fname),src,obj),[obj],[src])
+    update('%s -c %s -o %s -fPIC -I include'%(compiler(fname),src,obj),[obj],[src])
 
-def link(libname,srcs):
-    lib = 'lib/lib%s.a'%libname
+def link(libname,srcs,shared=False):
+    ext = ['a','so'][int(shared)]
+    lib = 'lib/lib%s.%s'%(libname,ext)
     objs = ['obj/%s.o'%src for src in srcs]
-    #update('g++ -o lib/lib%s.so -shared -fPIC %s'%(so,' '.join(objs)),[so],objs)
-    update('ar cr %s %s'%(lib,' '.join(objs)),[lib],objs)
+    if shared:
+        update('g++ -o %s -shared -fPIC %s'%(lib,' '.join(objs)),[lib],objs)
+    else:
+        update('ar cr %s %s'%(lib,' '.join(objs)),[lib],objs)
 
 def buildtest(test,lib_postfix=''):
     name = test.split('.')[0]+lib_postfix

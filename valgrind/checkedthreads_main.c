@@ -5,170 +5,11 @@
 
 /*
    This file is based on Lackey, an example Valgrind tool that does
-   some simple program measurement and tracing.
-
-   Lackey is Copyright (C) 2002-2012 Nicholas Nethercote
-      njn@valgrind.org
-
-   This program is free software; you can redistribute it and/or
-   modify it under the terms of the GNU General Public License as
-   published by the Free Software Foundation; either version 2 of the
-   License, or (at your option) any later version.
-
-   This program is distributed in the hope that it will be useful, but
-   WITHOUT ANY WARRANTY; without even the implied warranty of
-   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
-   General Public License for more details.
-
-   You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA
-   02111-1307, USA.
-
-   The GNU General Public License is contained in the file COPYING.
+   some simple program measurement and tracing, and Massif, a tool
+   for allocation profiling; both are GPL'd, and
+   
+   Copyright (C) 2002-2012 Nicholas Nethercote.
 */
-
-
-// This tool shows how to do some basic instrumentation.
-//
-// There are four kinds of instrumentation it can do.  They can be turned
-// on/off independently with command line options:
-//
-// * --basic-counts   : do basic counts, eg. number of instructions
-//                      executed, jumps executed, etc.
-// * --detailed-counts: do more detailed counts:  number of loads, stores
-//                      and ALU operations of different sizes.
-// * --trace-mem=yes:   trace all (data) memory accesses.
-// * --trace-superblocks=yes:   
-//                      trace all superblock entries.  Mostly of interest
-//                      to the Valgrind developers.
-//
-// The code for each kind of instrumentation is guarded by a clo_* variable:
-// clo_basic_counts, clo_detailed_counts, clo_trace_mem and clo_trace_sbs.
-//
-// If you want to modify any of the instrumentation code, look for the code
-// that is guarded by the relevant clo_* variable (eg. clo_trace_mem)
-// If you're not interested in the other kinds of instrumentation you can
-// remove them.  If you want to do more complex modifications, please read
-// VEX/pub/libvex_ir.h to understand the intermediate representation.
-//
-//
-// Specific Details about --trace-mem=yes
-// --------------------------------------
-// Lackey's --trace-mem code is a good starting point for building Valgrind
-// tools that act on memory loads and stores.  It also could be used as is,
-// with its output used as input to a post-mortem processing step.  However,
-// because memory traces can be very large, online analysis is generally
-// better.
-//
-// It prints memory data access traces that look like this:
-//
-//   I  0023C790,2  # instruction read at 0x0023C790 of size 2
-//   I  0023C792,5
-//    S BE80199C,4  # data store at 0xBE80199C of size 4
-//   I  0025242B,3
-//    L BE801950,4  # data load at 0xBE801950 of size 4
-//   I  0023D476,7
-//    M 0025747C,1  # data modify at 0x0025747C of size 1
-//   I  0023DC20,2
-//    L 00254962,1
-//    L BE801FB3,1
-//   I  00252305,1
-//    L 00254AEB,1
-//    S 00257998,1
-//
-// Every instruction executed has an "instr" event representing it.
-// Instructions that do memory accesses are followed by one or more "load",
-// "store" or "modify" events.  Some instructions do more than one load or
-// store, as in the last two examples in the above trace.
-//
-// Here are some examples of x86 instructions that do different combinations
-// of loads, stores, and modifies.
-//
-//    Instruction          Memory accesses                  Event sequence
-//    -----------          ---------------                  --------------
-//    add %eax, %ebx       No loads or stores               instr
-//
-//    movl (%eax), %ebx    loads (%eax)                     instr, load
-//
-//    movl %eax, (%ebx)    stores (%ebx)                    instr, store
-//
-//    incl (%ecx)          modifies (%ecx)                  instr, modify
-//
-//    cmpsb                loads (%esi), loads(%edi)        instr, load, load
-//
-//    call*l (%edx)        loads (%edx), stores -4(%esp)    instr, load, store
-//    pushl (%edx)         loads (%edx), stores -4(%esp)    instr, load, store
-//    movsw                loads (%esi), stores (%edi)      instr, load, store
-//
-// Instructions using x86 "rep" prefixes are traced as if they are repeated
-// N times.
-//
-// Lackey with --trace-mem gives good traces, but they are not perfect, for
-// the following reasons:
-//
-// - It does not trace into the OS kernel, so system calls and other kernel
-//   operations (eg. some scheduling and signal handling code) are ignored.
-//
-// - It could model loads and stores done at the system call boundary using
-//   the pre_mem_read/post_mem_write events.  For example, if you call
-//   fstat() you know that the passed in buffer has been written.  But it
-//   currently does not do this.
-//
-// - Valgrind replaces some code (not much) with its own, notably parts of
-//   code for scheduling operations and signal handling.  This code is not
-//   traced.
-//
-// - There is no consideration of virtual-to-physical address mapping.
-//   This may not matter for many purposes.
-//
-// - Valgrind modifies the instruction stream in some very minor ways.  For
-//   example, on x86 the bts, btc, btr instructions are incorrectly
-//   considered to always touch memory (this is a consequence of these
-//   instructions being very difficult to simulate).
-//
-// - Valgrind tools layout memory differently to normal programs, so the
-//   addresses you get will not be typical.  Thus Lackey (and all Valgrind
-//   tools) is suitable for getting relative memory traces -- eg. if you
-//   want to analyse locality of memory accesses -- but is not good if
-//   absolute addresses are important.
-//
-// Despite all these warnings, Lackey's results should be good enough for a
-// wide range of purposes.  For example, Cachegrind shares all the above
-// shortcomings and it is still useful.
-//
-// For further inspiration, you should look at cachegrind/cg_main.c which
-// uses the same basic technique for tracing memory accesses, but also groups
-// events together for processing into twos and threes so that fewer C calls
-// are made and things run faster.
-//
-// Specific Details about --trace-superblocks=yes
-// ----------------------------------------------
-// Valgrind splits code up into single entry, multiple exit blocks
-// known as superblocks.  By itself, --trace-superblocks=yes just
-// prints a message as each superblock is run:
-//
-//  SB 04013170
-//  SB 04013177
-//  SB 04013173
-//  SB 04013177
-//
-// The hex number is the address of the first instruction in the
-// superblock.  You can see the relationship more obviously if you use
-// --trace-superblocks=yes and --trace-mem=yes together.  Then a "SB"
-// message at address X is immediately followed by an "instr:" message
-// for that address, as the first instruction in the block is
-// executed, for example:
-//
-//  SB 04014073
-//  I  04014073,3
-//   L 7FEFFF7F8,8
-//  I  04014076,4
-//  I  0401407A,3
-//  I  0401407D,3
-//  I  04014080,3
-//  I  04014083,6
-
 
 #include "pub_tool_basics.h"
 #include "pub_tool_tooliface.h"
@@ -182,6 +23,7 @@
 #include "pub_tool_replacemalloc.h"
 #include "pub_tool_threadstate.h"
 #include "pub_tool_stacktrace.h"
+#include "pub_tool_debuginfo.h"
 #include <stdint.h>
 
 /*------------------------------------------------------------*/
@@ -215,10 +57,6 @@ static void ct_print_debug_usage(void)
 "    (none)\n"
    );
 }
-
-/*------------------------------------------------------------*/
-/*--- Stuff for --trace-mem                                ---*/
-/*------------------------------------------------------------*/
 
 #define MAX_DSIZE    512
 
@@ -509,6 +347,26 @@ static char* ct_stack_end(void)
     return (char*)(VG_(thread_get_stack_max)(tid) - VG_(thread_get_stack_size)(tid));
 }
 
+/* reuse (abuse?) of the page table structure to keep permanently suppressed addresses. */
+static ct_pagetab_L3 g_ct_supp_L3;
+
+static void ct_suppress_forever(Addr addr)
+{
+    ct_pagetab_stack_entry* real_stack = g_ct_pagetab_stack;
+    g_ct_pagetab_stack = 0; //TODO: this is too ugly... prevents "ownership initialization".
+    ct_page* page = ct_get_page(addr, &g_ct_supp_L3, 0); 
+    g_ct_pagetab_stack = real_stack;
+
+    int index_in_page = BYTE_IN_PAGE(addr);
+    page->owning_thread[index_in_page] = 1; /* in this page table, a non-zero value means "suppressed" */
+}
+
+static Bool ct_is_supressed_forever(Addr addr)
+{
+    ct_page* page = ct_get_page(addr, &g_ct_supp_L3, 1);
+    return page && page->owning_thread[BYTE_IN_PAGE(addr)];
+}
+
 static Bool ct_suppress(Addr addr)
 {
     char* p = (char*)addr;
@@ -523,10 +381,22 @@ static Bool ct_suppress(Addr addr)
             return True;
         }
     }
-    /* ignore writes to the command object. */
-    if(p >= (char*)g_ct_last_cmd && p < (char*)(g_ct_last_cmd+1)) {
+    /* ignore permanent suppressions. */
+    if(ct_is_supressed_forever(addr)) {
         return True;
     }
+    /* ignore writes to the command object. */
+    if(p >= (char*)g_ct_last_cmd && p < (char*)(g_ct_last_cmd+1)) {
+        ct_suppress_forever(addr);
+        return True;
+    }
+    /* ignore changes to .got/.plt/.got.plt */
+    VgSectKind kind = VG_(DebugInfo_sect_kind)(NULL, 0, addr);
+    if(kind == Vg_SectGOT || kind == Vg_SectPLT || kind == Vg_SectGOTPLT) {
+        ct_suppress_forever(addr);
+        return True;
+    }
+
     return False;
 }
 
@@ -975,7 +845,6 @@ static void unrecord_block(void* p)
 
 static void* ct_malloc ( ThreadId tid, SizeT szB )
 {
-    VG_(printf)("malloc!\n");
     return alloc_and_record_block( szB, VG_(clo_alignment), /*is_zeroed*/False );
 }
 
