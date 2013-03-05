@@ -41,25 +41,31 @@ int* ct_rand_perm(int n);
 
 void ct_valgrind_for_loop(int n, ct_ind_func f, void* context, ct_canceller* c) {
     int i;
-    /* int* perm = ct_rand_perm(n); FIXME!! */
+    int* perm;
+    /* deactivate so that random permutation generation is not "checked" */
+    ct_valgrind_int(8, 0);
+    ct_valgrind_cmd("setactiv");
+
+    perm = ct_rand_perm(n);
 
     for(i=0; i<n; ++i) {
-        int ind = i; /* FIXME!! perm[i]; */
-        /* thread ID != index because of thread-local storage
+        int ind = perm[i];
+        /* thread ID != index because of thread-local storage, if we ever add that...
            [and because of the ID range being smaller... but that's another matter.] */
-        ct_valgrind_int(4, ind%255); /* there are 255 IDs (0 is reserved;
+        ct_valgrind_int(4, ind%254); /* there are 254 IDs (0 and 255 are reserved;
                                       1 is added by Valgrind and subtracted back in messages). */
         ct_valgrind_cmd("thrd");
 
         ct_valgrind_int(4, ind);
-        ct_valgrind_cmd("iter");
+        ct_valgrind_cmd("iter"); /* activate checking */
 
         f(ind, context);
 
-        ct_valgrind_int(4, ind);
+        ct_valgrind_int(4, ind); /* deactivate checking */
         ct_valgrind_cmd("done");
     }
-    /* free(perm); FIXME!! */
+
+    free(perm);
 }
 
 /* "volatile" for portable inlining prevention (instead of __attribute__((noinline))) */
@@ -68,14 +74,14 @@ volatile ct_imp_for_func g_ct_valgrind_for = &ct_valgrind_for_loop;
 /* under Valgrind, loops run to completion even if canceled */
 void ct_valgrind_for(int n, ct_ind_func f, void* context, ct_canceller* c) {
     volatile int local=0;
-    ct_valgrind_cmd("begin_for");
+    ct_valgrind_cmd("begin_for"); /* push state (including whether checking is activated) */
 
     ct_valgrind_ptr(8, &local);
     ct_valgrind_cmd("stackbot");
 
     (*g_ct_valgrind_for)(n,f,context,c);
 
-    ct_valgrind_cmd("end_for");
+    ct_valgrind_cmd("end_for"); /* pop state (possibly re-activating checking) */
 }
 
 int ct_debug_get_owner(const void* addr) {
