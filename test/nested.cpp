@@ -3,33 +3,35 @@
 #include <stdlib.h>
 #define RN 10
 #define N (RN*RN)
-void print_and_check_results(int array[]) {
-    int i;
-    printf("results:");
-    for(i=0; i<3; ++i) {
-        printf(" %d", array[i]);
-    }
-    printf(" ...");
-    for(i=N-3; i<N; ++i) {
-        printf(" %d", array[i]);
-    }
-    printf("\n");
-    for(i=0; i<N; ++i) {
-        if(array[i] != i) {
-            printf("error at %d!\n", i);
-            exit(1);
-        }
-    }
-}
-int main() {
+#define SCALE 1
+#include "check.h"
+
+int main(int argc, char** argv) {
     int array[N]={0};
+    int bug_i = -1;
+    int bug_j = -1;
+    if(argc == 3) {
+        bug_i = atoi(argv[1]);
+        bug_j = atoi(argv[2]);
+    }
 
     ct_init(0);
     ctx_for(RN, [&](int i) {
         ctx_for(RN, [&](int j) {
             int ind = i*RN + j;
+
             array[ind] = ind;
+
+            if(j == bug_j) {
+                array[ind+1] = 1;
+                if(i == bug_i) {
+                    array[ind+RN] = 1;
+                }
+            }
         });
+        if(i == bug_i) {
+            array[(i+1)*RN] = 1;
+        }
     });
     print_and_check_results(array);
     ct_fini();

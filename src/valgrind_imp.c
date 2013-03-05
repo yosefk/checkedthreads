@@ -8,7 +8,7 @@
 #define MAX_CMD 128
 
 struct {
-    volatile uint32_t stored_magic;
+    volatile int32_t stored_magic;
     const char const_magic[16];
     volatile char payload[MAX_CMD];
 } g_ct_valgrind_cmd = { 0, CONST_MAGIC, "" };
@@ -41,10 +41,10 @@ int* ct_rand_perm(int n);
 
 void ct_valgrind_for_loop(int n, ct_ind_func f, void* context, ct_canceller* c) {
     int i;
-    int* perm = ct_rand_perm(n);
+    /* int* perm = ct_rand_perm(n); FIXME!! */
 
     for(i=0; i<n; ++i) {
-        int ind = perm[i];
+        int ind = i; /* FIXME!! perm[i]; */
         /* thread ID != index because of thread-local storage
            [and because of the ID range being smaller... but that's another matter.] */
         ct_valgrind_int(4, ind%255); /* there are 255 IDs (0 is reserved;
@@ -59,7 +59,7 @@ void ct_valgrind_for_loop(int n, ct_ind_func f, void* context, ct_canceller* c) 
         ct_valgrind_int(4, ind);
         ct_valgrind_cmd("done");
     }
-    free(perm);
+    /* free(perm); FIXME!! */
 }
 
 /* "volatile" for portable inlining prevention (instead of __attribute__((noinline))) */
@@ -76,6 +76,16 @@ void ct_valgrind_for(int n, ct_ind_func f, void* context, ct_canceller* c) {
     (*g_ct_valgrind_for)(n,f,context,c);
 
     ct_valgrind_cmd("end_for");
+}
+
+int ct_debug_get_owner(const void* addr) {
+    volatile int i,m;
+    ct_valgrind_ptr(8, addr);
+    ct_valgrind_cmd("getowner");
+    for(i=0; i<5; ++i) {
+        m = g_ct_valgrind_cmd.stored_magic;
+    }
+    return g_ct_valgrind_cmd.stored_magic == STORED_MAGIC ? CT_OWNER_UNKNOWN : g_ct_valgrind_cmd.stored_magic;
 }
 
 ct_imp g_ct_valgrind_imp = {

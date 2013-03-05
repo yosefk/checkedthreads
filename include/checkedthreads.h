@@ -61,6 +61,13 @@ void ct_invoke(const ct_task tasks[], ct_canceller* c);
 typedef void (*ct_ind_func)(int ind, void* context);
 void ct_for(int n, ct_ind_func f, void* context, ct_canceller* c);
 
+/* under Valgrind or other ownership-tracking environment,
+   returns an ID of the owner of the given address; elsewhere,
+   always returns CT_OWNER_UNKNOWN */
+#define CT_OWNER_COMMON (-1) /* everybody can access it */
+#define CT_OWNER_UNKNOWN (-2) /* not under Valgrind or equivalent */
+int ct_debug_get_owner(const void* addr);
+
 #ifdef __cplusplus
 } /* extern "C" */
 

@@ -1,4 +1,4 @@
-
+#line 2 "checkedthreads_main.c"
 /*--------------------------------------------------------------------*/
 /*--- A checkedthreads data race detector.   checkedthreads_main.c ---*/
 /*--------------------------------------------------------------------*/
@@ -314,7 +314,7 @@ typedef struct ct_page_ {
        the rest means "owned by i" (so is OK to access for i only.) */
     unsigned char owning_thread[PAGE_SIZE];
     unsigned char* dirty_owners; /* PAGE_SIZE entries, when allocated. */
-    Addr creating_address; /* we could keep the base address as well... */
+    Addr base_address;
     /* we keep a linked a list of allocated pages so as to not have
        to traverse all indexes to find allocated pages. */
     struct ct_page_* prev_alloc_page;
@@ -359,7 +359,7 @@ static void ct_init_ownership(ct_page* page)
     if(g_ct_pagetab_stack == 0 || g_ct_pagetab_stack->pagetab_L3 == 0) {
         return;
     }
-    ct_page* spawner_page = ct_get_page(page->creating_address, g_ct_pagetab_stack->pagetab_L3, 1);
+    ct_page* spawner_page = ct_get_page(page->base_address, g_ct_pagetab_stack->pagetab_L3, 1);
     if(spawner_page == 0) {
         return;
     }
@@ -405,7 +405,7 @@ static ct_page* ct_get_page(Addr a, ct_pagetab_L3* pagetab_L3, int readonly_page
     if(page == 0) {
         if(readonly_pagetab) return 0;
         page = (ct_page*)VG_(calloc)("page", 1, sizeof(ct_page));
-        page->creating_address = a;
+        page->base_address = a - BYTE_IN_PAGE(a);
         page->prev_alloc_page = pagetab_L1->last_alloc_page;
         pagetab_L1->last_alloc_page = page;
         pagetab_L1->pages[page_index] = page;
@@ -435,7 +435,9 @@ static void ct_commit_ownership(ct_page* page)
     if(!page->dirty_owners || g_ct_pagetab_stack == 0 || g_ct_pagetab_stack->pagetab_L3 == 0) {
         return;
     }
-    ct_page* spawner_page = ct_get_page(page->creating_address, g_ct_pagetab_stack->pagetab_L3, 0);
+    /* FIXME: we need parent pointers in page tables or something - instead of these globals...
+       because here, for instance, ct_get_page may fiddle with g_ct_pagetab_stack itself in init_ownership. */
+    ct_page* spawner_page = ct_get_page(page->base_address, g_ct_pagetab_stack->pagetab_L3, 0);
     if(!spawner_page->dirty_owners) {
         spawner_page->dirty_owners = VG_(calloc)("dirty_owners", 1, PAGE_SIZE);
     }
@@ -446,6 +448,7 @@ static void ct_commit_ownership(ct_page* page)
            is owned by the loop spawner - "joining" means "as if we never forked" */
         if(page->dirty_owners[i]) {
             spawner_page->dirty_owners[i] = curr_thread;
+            spawner_page->owning_thread[i] = curr_thread;
         }
     }
 }
@@ -454,6 +457,9 @@ static void ct_pop_pagetab(void)
 {
     ct_pagetab_L3* pagetab_L3 = g_ct_pagetab_L3;
     ct_pagetab_L2* pagetab_L2 = pagetab_L3->last_alloc_pagetab_L2;
+
+    g_ct_curr_thread = g_ct_pagetab_stack->thread;
+
     /* free all L2 pages */
     while(pagetab_L2) {
         ct_pagetab_L2* prev_pagetab_L2 = pagetab_L2->prev_alloc_pagetab_L2;
@@ -483,7 +489,6 @@ static void ct_pop_pagetab(void)
     VG_(free)(pagetab_L3);
 
     g_ct_pagetab_L3 = g_ct_pagetab_stack->pagetab_L3;
-    g_ct_curr_thread = g_ct_pagetab_stack->thread;
     g_ct_active = g_ct_pagetab_stack->active;
     g_ct_stackbot = g_ct_pagetab_stack->stackbot;
 
@@ -603,6 +608,17 @@ static void ct_process_command(ct_cmd* cmd)
         g_ct_stackend = ct_stack_end();
         if(clo_print_commands) VG_(printf)("stackbot %p [stackend %p]\n",
                 (void*)g_ct_stackbot, (void*)g_ct_stackend);
+    }
+    else if(ct_str_is(cmd->payload, "getowner")) {
+        Addr addr = ct_cmd_ptr(cmd, 8);
+        int owner = 0;
+        ct_page* page = ct_get_page(addr, g_ct_pagetab_L3, 1);
+        if(page) {
+            int index_in_page = BYTE_IN_PAGE(addr);
+            owner = page->owning_thread[index_in_page];
+        }
+        cmd->stored_magic = owner-1;
+        if(clo_print_commands) VG_(printf)("getowner %p -> %d\n", (void*)addr, owner-1);
     }
     else {
         VG_(printf)("checkedthreads: WARNING - unknown command!\n");
