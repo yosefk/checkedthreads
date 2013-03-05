@@ -179,6 +179,7 @@
 #include "pub_tool_options.h"
 #include "pub_tool_machine.h"     // VG_(fnptr_to_fnentry)
 #include "pub_tool_mallocfree.h"
+#include "pub_tool_replacemalloc.h"
 #include "pub_tool_threadstate.h"
 #include "pub_tool_stacktrace.h"
 #include <stdint.h>
@@ -192,7 +193,7 @@
 static Bool clo_trace_mem       = True;
 static Bool clo_print_commands  = False;
 
-static Bool lk_process_cmd_line_option(Char* arg)
+static Bool ct_process_cmd_line_option(Char* arg)
 {
    if VG_BOOL_CLO(arg, "--print-commands", clo_print_commands) {}
    else
@@ -200,7 +201,7 @@ static Bool lk_process_cmd_line_option(Char* arg)
    return True;
 }
 
-static void lk_print_usage(void)
+static void ct_print_usage(void)
 {  
    VG_(printf)(
 "    --print-commands=no|yes   print commands issued by the checkedtheads\n"
@@ -208,7 +209,7 @@ static void lk_print_usage(void)
    );
 }
 
-static void lk_print_debug_usage(void)
+static void ct_print_debug_usage(void)
 {  
    VG_(printf)(
 "    (none)\n"
@@ -300,6 +301,8 @@ static ct_cmd* g_ct_last_cmd = 0; /* ignore writes to cmd */
 #define L1_PAGETAB(addr) (((UInt)addr >> 24) & 0xfff)
 #define PAGE(addr) (((UInt)addr >> 12) & 0xfff)
 #define BYTE_IN_PAGE(addr) ((UInt)addr & 0xfff)
+
+#define OWNER_INACCESSIBLE 0xff /* inaccessible memory - "owned" by thread 255 which is never the current thread. */
 
 /* owning_thread[] is a summary of all levels up to this one; if
    owning_thread[i]==0, perhaps indeed the location is owned by nobody -
@@ -446,9 +449,12 @@ static void ct_commit_ownership(ct_page* page)
     for(i=0; i<PAGE_SIZE; ++i) {
         /* no matter who owned the location in this loop, the location now
            is owned by the loop spawner - "joining" means "as if we never forked" */
-        if(page->dirty_owners[i]) {
-            spawner_page->dirty_owners[i] = curr_thread;
-            spawner_page->owning_thread[i] = curr_thread;
+        int owner = page->dirty_owners[i];
+        if(owner) {
+            /* inaccessible memory is a special case - it stays inaccessible after the join. */
+            int joined_owner = owner == OWNER_INACCESSIBLE ? owner : curr_thread;
+            spawner_page->dirty_owners[i] = joined_owner;
+            spawner_page->owning_thread[i] = joined_owner;
         }
     }
 }
@@ -524,7 +530,7 @@ static Bool ct_suppress(Addr addr)
     return False;
 }
 
-static inline void ct_on_access(Addr base, SizeT size, Bool store)
+static inline void ct_on_access(Addr base, SizeT size, Bool store, Bool report_errors)
 {
     SizeT i;
     ct_pagetab_L3* pagetab_L3 = g_ct_pagetab_L3;
@@ -535,7 +541,7 @@ static inline void ct_on_access(Addr base, SizeT size, Bool store)
         int index_in_page = BYTE_IN_PAGE(addr);
         int owner = page->owning_thread[index_in_page];
         if(owner && owner != curr_thread) {
-            if(!ct_suppress(addr)) {
+            if(report_errors && !ct_suppress(addr)) {
                 VG_(printf)("checkedthreads: error - thread %d accessed %p [%p,%d], owned by %d\n",
                         g_ct_curr_thread-1,
                         (void*)addr, (void*)base, (int)size,
@@ -600,6 +606,9 @@ static void ct_process_command(ct_cmd* cmd)
         if(clo_print_commands) VG_(printf)("done %d\n", ct_cmd_int(cmd, 4));
         g_ct_active = False;
     }
+    else if(ct_str_is(cmd->payload, "setactiv")) {
+        g_ct_active = (Bool)ct_cmd_int(cmd, 8);
+    }
     else if(ct_str_is(cmd->payload, "thrd")) {
         g_ct_curr_thread = ct_cmd_int(cmd, 4)+1;
     }
@@ -630,7 +639,7 @@ static void ct_process_command(ct_cmd* cmd)
 static VG_REGPARM(2) void trace_load(Addr addr, SizeT size)
 {
     if(g_ct_active) {
-        ct_on_access(addr, size, False);
+        ct_on_access(addr, size, False, True);
     }
 }
 
@@ -641,7 +650,7 @@ static inline void ct_on_store(Addr addr, SizeT size)
        ct_process_command(p);
    }
    if(g_ct_active) {
-       ct_on_access(addr, size, True);
+       ct_on_access(addr, size, True, True);
    }
 }
 
@@ -777,12 +786,12 @@ void addEvent_Dw ( IRSB* sb, IRAtom* daddr, Int dsize )
 /*--- Basic tool functions                                 ---*/
 /*------------------------------------------------------------*/
 
-static void lk_post_clo_init(void)
+static void ct_post_clo_init(void)
 {
 }
 
 static
-IRSB* lk_instrument ( VgCallbackClosure* closure,
+IRSB* ct_instrument ( VgCallbackClosure* closure,
                       IRSB* sbIn, 
                       VexGuestLayout* layout, 
                       VexGuestExtents* vge,
@@ -925,29 +934,134 @@ IRSB* lk_instrument ( VgCallbackClosure* closure,
    return sbOut;
 }
 
-static void lk_fini(Int exitcode)
+static void ct_fini(Int exitcode)
 {
 }
 
-static void lk_pre_clo_init(void)
+//dynamic memory: when allocated, set the allocating thread as the owner.
+//when freed, memory becomes inaccessible (we have a special thread for that).
+
+static void* alloc_and_record_block(SizeT req_szB, SizeT req_alignB, Bool is_zeroed)
+{
+    if ((SSizeT)req_szB < 0) return NULL;
+
+    // Allocate and zero if necessary.
+    void* p = VG_(cli_malloc)( req_alignB, req_szB );
+    if (!p) {
+        return NULL;
+    }
+    if (is_zeroed) VG_(memset)(p, 0, req_szB);
+
+    if(g_ct_active) {
+        ct_on_access((Addr)p, req_szB, True, False);
+    }
+
+    return p;
+}
+
+static void unrecord_block(void* p)
+{
+    if(g_ct_active) {
+        int real_curr_thread = g_ct_curr_thread;
+        g_ct_curr_thread = OWNER_INACCESSIBLE;
+        ct_on_access((Addr)p, VG_(malloc_usable_size)(p), True, False);
+        g_ct_curr_thread = real_curr_thread;
+    }
+}
+
+//------------------------------------------------------------//
+//--- malloc() et al replacement wrappers                  ---//
+//------------------------------------------------------------//
+
+static void* ct_malloc ( ThreadId tid, SizeT szB )
+{
+    VG_(printf)("malloc!\n");
+    return alloc_and_record_block( szB, VG_(clo_alignment), /*is_zeroed*/False );
+}
+
+static void* ct___builtin_new ( ThreadId tid, SizeT szB )
+{
+    return alloc_and_record_block( szB, VG_(clo_alignment), /*is_zeroed*/False );
+}
+
+static void* ct___builtin_vec_new ( ThreadId tid, SizeT szB )
+{
+    return alloc_and_record_block( szB, VG_(clo_alignment), /*is_zeroed*/False );
+}
+
+static void* ct_calloc ( ThreadId tid, SizeT m, SizeT szB )
+{
+    return alloc_and_record_block( m*szB, VG_(clo_alignment), /*is_zeroed*/True );
+}
+
+static void *ct_memalign ( ThreadId tid, SizeT alignB, SizeT szB )
+{
+    return alloc_and_record_block( szB, alignB, False );
+}
+
+static void ct_free ( ThreadId tid, void* p )
+{
+    unrecord_block(p);
+    VG_(cli_free)(p);
+}
+
+static void ct___builtin_delete ( ThreadId tid, void* p )
+{
+    ct_free(tid, p);
+}
+
+static void ct___builtin_vec_delete ( ThreadId tid, void* p )
+{
+    ct_free(tid, p);
+}
+
+static void* ct_realloc ( ThreadId tid, void* p_old, SizeT new_szB )
+{
+    void* p_new = alloc_and_record_block(new_szB, VG_(clo_alignment), False);
+    SizeT to_copy = VG_(malloc_usable_size)(p_old);
+    if(to_copy > new_szB) {
+        to_copy = new_szB;
+    }
+    VG_(memcpy)(p_new, p_old, to_copy);
+    ct_free(tid, p_old);
+    return p_new;
+}
+
+static SizeT ct_malloc_usable_size ( ThreadId tid, void* p )
+{                                                            
+    return VG_(malloc_usable_size)(p);
+}                                                            
+
+static void ct_pre_clo_init(void)
 {
    VG_(details_name)            ("checkedthreads");
    VG_(details_version)         (NULL);
    VG_(details_description)     ("a data race detector for the checkedthreads framework");
    VG_(details_copyright_author)(
-      "Copyright (C) 2012-2013 by Yossi Kreinin (Yossi.Kreinin@gmail.com)");
-   VG_(details_bug_reports_to)  (VG_BUGS_TO);
+      "Copyright (C) 2012-2013 by Yossi Kreinin (http://yosefk.com)");
+   VG_(details_bug_reports_to)  ("Yossi.Kreinin@gmail.com");
    VG_(details_avg_translation_sizeB) ( 200 );
 
-   VG_(basic_tool_funcs)          (lk_post_clo_init,
-                                   lk_instrument,
-                                   lk_fini);
-   VG_(needs_command_line_options)(lk_process_cmd_line_option,
-                                   lk_print_usage,
-                                   lk_print_debug_usage);
+   VG_(basic_tool_funcs)          (ct_post_clo_init,
+                                   ct_instrument,
+                                   ct_fini);
+   VG_(needs_command_line_options)(ct_process_cmd_line_option,
+                                   ct_print_usage,
+                                   ct_print_debug_usage);
+   VG_(needs_malloc_replacement)  (ct_malloc,
+                                   ct___builtin_new,
+                                   ct___builtin_vec_new,
+                                   ct_memalign,
+                                   ct_calloc,
+                                   ct_free,
+                                   ct___builtin_delete,
+                                   ct___builtin_vec_delete,
+                                   ct_realloc,
+                                   ct_malloc_usable_size,
+                                   0 );
 }
 
-VG_DETERMINE_INTERFACE_VERSION(lk_pre_clo_init)
+VG_DETERMINE_INTERFACE_VERSION(ct_pre_clo_init)
 
 /*--------------------------------------------------------------------*/
 /*--- end                                    checkedthreads_main.c ---*/
