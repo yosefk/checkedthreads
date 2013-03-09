@@ -15,6 +15,11 @@ Contents
 ========
 
 * [What race conditions will be found?](#what-race-conditions-will-be-found)
+* [Nice features](#nice-features)
+* [API](#api)
+* [Planned features](#planned-features)
+* [Coding style](#coding-style)
+* [Support/contact](#support-contact)
 
 What race conditions will be found?
 ===================================
@@ -190,3 +195,8 @@ Coding style
 * Everything is lowercase, underscore_separated. Macros mostly UPPERCASE.
 * Valgrind tool code (at valgrind/) should use Valgrind style.
 * Style isn't that important.
+
+Support/contact
+===============
+
+<Yossi.Kreinin@gmail.com>/<http://yosefk.com>. Feel free to contact if you run into any sort of problem using checkedthreads.
