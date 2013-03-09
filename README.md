@@ -19,6 +19,7 @@ Contents
 * [API](#api)
 * [Environment variables](#environment-variables)
 * [How race detection works - TODO](#how-race-detection-works)
+* [Building and installing - TODO](#building-and-installing)
 * [Planned features](#planned-features)
 * [Coding style](#coding-style)
 * [Support/contact](#supportcontact)
