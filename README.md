@@ -96,14 +96,14 @@ In a nutshell:
 * Both parallel loops and function calls can be **nested**.
 * A parallel loop or a set of parallel function calls can be **cancelled** before they complete.
 
-Examples:
+Examples using the C++11 API:
 
 ```C++
 ctx_for(100, [&](int i) {
-  ctx_for(100, [&](int j) {
-    array[i][j] = i*j;
-  }
-}
+    ctx_for(100, [&](int j) {
+        array[i][j] = i*j;
+    });
+});
 ```
 
 Absolutely boneheaded code, but you get the idea. i and j go from 0 to 99; currently there's no way to specify
@@ -135,15 +135,36 @@ void quicksort(T* beg, T* end) {
     }
 }
 ```
+A C89 example:
 
-/* C: ct_for(10, &callback, &args); */
-typedef void (*ct_ind_func)(int ind, void* context);
-void ct_for(int n, ct_ind_func f, void* context);
+```C
+void set_elem(int i, void* context) {
+    int* array = (int*)context;
+    array[i] = i;
+}
 
-//C++: ctx_for(10, [=] (int i) { use(i, args); });
-typedef std::function<void(int)> ctx_ind_func;
-void ctx_for(int n, const ctx_ind_func& f);
+void example(void) {
+    int array[100];
+    ct_for(100, set_elem, array, 0);
+}
 ```
+That last "0" is a (null) pointer to a *canceller*; we'll get to that in a moment. Meanwhile, parallel invoke in C89:
+
+```C
+void a(void* context) { *(int*)context = 1; }
+void b(void* context) { *(int*)context = 2; }
+
+void example(void) {
+    int first, second;
+    ct_task tasks[] = {
+        {a, &first},
+        {b, &second},
+        {0, 0}
+    };
+    ct_invoke(tasks, 0);
+}
+```
+Again the last 0 is the canceller.
 
 Planned features
 ================
