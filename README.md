@@ -7,8 +7,12 @@ checkedthreads is a fork-join parallelism framework providing:
 * **Automatic load balancing** across the available cores.
 * **Automated race detection** using debugging schedulers and Valgrind-based instrumentation.
 
-What race conditions can be found?
-==================================
+If you have dozens of developers working on millions of lines of
+multithreaded code, checkedthreads is supposed to let you ship new versions **without worrying about parallelism bugs**.
+It's based on a decade of experience in that kind of environment.
+
+What race conditions will be found?
+===================================
 
 All of them! checkedthreads provides two verification methods:
 
@@ -86,9 +90,52 @@ is a framework for *parallelizing computational code* which does not interact wi
 API
 ===
 
+In a nutshell:
 
+* You can parallelize **loops** (with ct_for) and **function calls** (with ct_invoke).
+* Both parallel loops and function calls can be **nested**.
+* A parallel loop or a set of parallel function calls can be **cancelled** before they complete.
+
+Examples:
 
 ```C++
+ctx_for(100, [&](int i) {
+  ctx_for(100, [&](int j) {
+    array[i][j] = i*j;
+  }
+}
+```
+
+Absolutely boneheaded code, but you get the idea. i and j go from 0 to 99; currently there's no way to specify
+a start other than 0 or an increment other than 1. There's also no way to control "grain size" -
+each index is a separately scheduled task, so it should do a non-trivial amount of work, or the scheduling
+overhead will dwarf any gains from running on several cores.
+
+For a better example, here's parallel sorting:
+```C++
+template<class T>
+void quicksort(T* beg, T* end) {
+    if (end-beg >= MIN_PAR) {
+        int piv = *beg, l = 1, r = end-beg;
+        while (l < r) {
+            if (beg[l] <= piv) 
+                l++;
+            else
+                std::swap(beg[l], beg[--r]);
+        }   
+        std::swap(beg[--l], beg[0]);
+        //sort the two parts in parallel:
+        ctx_invoke( 
+            [=] { quicksort(beg, beg+l); },
+            [=] { quicksort(beg+r, end); }
+        );  
+    }
+    else {
+        std::sort(beg, end);
+    }
+}
+```
+
 /* C: ct_for(10, &callback, &args); */
 typedef void (*ct_ind_func)(int ind, void* context);
 void ct_for(int n, ct_ind_func f, void* context);
@@ -103,6 +150,7 @@ Planned features
 
 Planned features not yet avaialable:
 
+* Proper checking of cancelling (cancelling is only OK if at most one thread writes things)
 * Custom allocator interface (to tell the checker when memory is allocated/freed)
 * A compiler (LLVM/gcc) pass in addition to the dynamic Valgrind instrumentation
 * A Windows build and integration with PPL
