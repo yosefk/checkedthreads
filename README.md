@@ -17,9 +17,10 @@ Contents
 * [What race conditions will be found?](#what-race-conditions-will-be-found)
 * [Nice features](#nice-features)
 * [API](#api)
+* [Environment variables](#environment-variables)
 * [Planned features](#planned-features)
 * [Coding style](#coding-style)
-* [Support/contact](#support-contact)
+* [Support/contact](#supportcontact)
 
 What race conditions will be found?
 ===================================
@@ -182,7 +183,9 @@ void example(void) {
     ct_invoke(tasks, 0);
 }
 ```
-Again the last 0 is the canceller. Speaking of which - here's an example using cancelling:
+tasks[] should have {0,0} as its last element; and again, the "0" argument is the canceller.
+
+Speaking of which - here's an example of actually using cancelling:
 
 ```C++
 int pos_of_77 = -1;
@@ -207,6 +210,25 @@ ct_free_canceller(c);
 * **At most one iteration/function call can write something** - otherwise, different results might be produced
   depending on timing, because cancelling is not deterministic in the sense that different iterations may
   be cancelled in different runs.
+  
+The last thing to note is that you need, before using checkedthreads, to call **ct_init()** - and then
+call **ct_fini()** when you're done. ct_init gets a single argument - the environment; for example:
+
+```C
+ct_env_var env[] = {
+    {"CT_SCHED", "shuffle"},
+    {"CT_RAND_REV", "1"},
+    {0, 0}
+};
+ct_init(env);
+```
+You can pass 0 instead of env; if you do that, $CT_SCHED and $CT_RAND_REV will be looked up using getenv(),
+as will all variables not mentioned in env[] if you do pass it.
+
+The available environment variables and their meaning are discussed in the next section.
+
+Environment variables
+=====================
 
 Planned features
 ================
