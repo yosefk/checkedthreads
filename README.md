@@ -11,6 +11,11 @@ If you have dozens of developers working on millions of lines of
 multithreaded code, checkedthreads is supposed to let you ship new versions **without worrying about parallelism bugs**.
 It's based on a decade of experience in that kind of environment.
 
+Contents
+========
+
+* [What race conditions will be found?](#what-race-conditions-will-be-found)
+
 What race conditions will be found?
 ===================================
 
