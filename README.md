@@ -145,7 +145,15 @@ void quicksort(T* beg, T* end) {
     }
 }
 ```
-A C89 example:
+Not unlike ctx_for, ctx_invoke (logically) calls all the functions it's passed in parallel.
+
+The different
+function calls scheduled by ctx_invoke, as well as the different iterations of ctx_for, **should never
+write to the same memory address** - that is, they should be completely independent. Once ctx_for/ctx_invoke
+returns, all the memory updates done by all the iterations/function calls can be used by the caller of
+ctx_for/invoke.
+
+Now a C89 example:
 
 ```C
 void set_elem(int i, void* context) {
@@ -174,7 +182,31 @@ void example(void) {
     ct_invoke(tasks, 0);
 }
 ```
-Again the last 0 is the canceller.
+Again the last 0 is the canceller. Speaking of which - here's an example using cancelling:
+
+```C++
+int pos_of_77 = -1;
+ct_canceller* c = ct_alloc_canceller();
+ctx_for(N, [&](int i) {
+    if(arr[i] == 77) {
+        pos_of_77 = i;
+        ct_cancel(c);
+    }
+}, c);
+ct_free_canceller(c);
+```
+(Again a silly piece of code doing way too little work per index, but no matter.) Notes on cancelling:
+
+* **Everything can be cancelled**: ct_for, ctx_for, ct_invoke, and ctx_invoke can all get a canceller parameter.
+* **A single canceller can cancel many things**: ct_cancel(c) cancels all loops and parallel calls to which c
+  was originally passed.
+* **Nested loops/calls don't automatically inherit the canceller**: when a loop is cancelled, no more iterations
+  will be scheduled - but all iterations which are already in flight will be completed. If such an iteration
+  itself spawns tasks, then those tasks will *not* be canceled - unless that iteration explicitly passed
+  to the tasks it spawned the same canceller which was used to cancel the loop it belongs to.
+* **At most one iteration/function call can write something** - otherwise, different results might be produced
+  depending on timing, because cancelling is not deterministic in the sense that different iterations may
+  be cancelled in different runs.
 
 Planned features
 ================
