@@ -122,34 +122,32 @@ As in, while instead of for; worth looking into.
 Races will be flagged; not necessarily bugs that are /also/ races
 =================================================================
 
-Some bugs are *also* race conditions. For instance, mallocing and accessing uninitialized memory
-will lead to different results depending on timing; it's also a bug in a serial program. Or,
-out of bounds accesses can yield different results depending on timing; they're also bugs
-in a serial program. Or, access to on-stack data after the function that allocated it returns, etc.
+Some bugs are *"also"* race conditions. For instance:
 
-These bugs will not necessarily be flagged as races by the Valgrind tool. What will be certainly be flagged
-as a race is something that has a chance to not be a bug in a serial program but also has a chance
-to be a race condition in its parallel version. For instance, access to initialized data through
-"legitimatly" obtained pointers will certainly be flagged as a race if there's a chance for it
-to be a race.
+* mallocing and accessing uninitialized memory will lead to different results depending on timing -
+  and it's also a bug in a serial run.
+* out of bounds accesses can yield different results depending on timing - and they're also bugs
+  in a serial run.
+* Access to on-stack data after the function that allocated it returns.
+* ...
 
-TODO
-====
+These bugs will not necessarily be flagged as races by the Valgrind tool. What will **certainly** be flagged
+as a race is something that:
 
-PIC code support and a libcheckedthreads.so, possibly. Even "without shared libraries",
-we need to handle the .got.plt business because as long as you don't use -static, which
-you can't if you want valgrind to work, you're going to have these in standard libraries.
+* possibly is *not* a bug in a serial run (so won't be flagged by other bug finding tools), but...
+* is a race condition in its parallel version.
 
-automatic config and test. remove the dependence on C++11 for the library?
+For instance, accesses to an initialized data item through "legitimately" obtained pointers will certainly
+be flagged as a race if it could possibly be a race in a parallel run.
 
 Planned features
 ================
 
 Planned features not yet avaialable:
 
-* Atomic operations
-* Thread-local storage
-* Concurrent collections
+* Custom allocator interface (to tell the checker when memory is allocated/freed)
+* A compiler (LLVM/gcc) pass in addition to the dynamic Valgrind instrumentation
+* A Windows build and integration with PPL
 
 Coding style
 ============
