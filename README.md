@@ -18,6 +18,7 @@ Contents
 * [Nice features](#nice-features)
 * [API](#api)
 * [Environment variables](#environment-variables)
+* [How race detection works - TODO](#how-race-detection-works)
 * [Planned features](#planned-features)
 * [Coding style](#coding-style)
 * [Support/contact](#supportcontact)
@@ -229,6 +230,28 @@ The available environment variables and their meaning are discussed in the next 
 
 Environment variables
 =====================
+
+**$CT_SCHED** is the scheduler to use, and can be one of:
+
+* **serial**: run loops serially from 0 to N and call functions first to last.
+* **shuffle**: serial run with a pseudo-random, deterministic order of iterations and function calls.
+* **valgrind**: same schedule as shuffle, but also communicates with the Valgrind checker, telling it what's what.
+* **tbb**: schedule tasks using TBB's simple_partitioner with grain size of 1.
+* **openmp**: schedule tasks using OpenMP - #pragma omp parallel for schedule(dynamic,1).
+* **pthreads** (default): schedule tasks using a worker pool of pthreads and a single shared queue.
+
+**$CT_THREADS** is the worker pool size (relevant for the parallel schedulers); the default is a thread per core.
+
+**$CT_VERBOSE**: at 2, all indexes are printed; at 1, loops/invokes; at 0 (default), nothing is printed.
+
+**$CT_RAND_SEED**: a seed for order-randomizing schedulers (shuffle & valgrind).
+
+**$CT_RAND_REV**: if non-zero, each random index permutation will be reversed. Useful because an order and its
+reverse are sufficient to make a load-after-store sequence out of any store-after-load sequence (why that's
+useful is explained in the next section, which also shows how to set these env vars in order to detect races.)
+
+How race detection works
+========================
 
 Planned features
 ================
