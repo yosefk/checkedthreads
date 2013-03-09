@@ -74,37 +74,12 @@ int ct_debug_get_owner(const void* addr);
 /* we could check the value of __cplusplus but not all compilers implement it correctly */
 #ifdef CT_CXX11
 
-//we could use std::function<void(int)> instead, except for it calling new
-//and looking more painful in call stacks
-struct ctx_ind_func {
-    virtual void on_index(int i) = 0;
-};
+#include <functional>
+typedef std::function<void(int)> ctx_ind_func;
 
-template<class F>
-struct ctx_ind_func_impl : ctx_ind_func {
-    const F& f;
-    ctx_ind_func_impl(const F& f_) : f(f_) {}
-    virtual void on_index(int i) { f(i); }
-};
+void ctx_for(int n, const ctx_ind_func& f, ct_canceller* c=0);
 
-void ctx_for_(int n, const ctx_ind_func& f, ct_canceller* c=0);
-
-template<class F>
-inline void ctx_for(int n, const F& f, ct_canceller* c=0) {
-    ctx_ind_func_impl<F> func(f);
-    ctx_for_(n, func, c);
-}
-
-/* helpers for ctx_invoke... */
-struct ctx_task_func {
-    virtual void run_task() = 0;
-};
-template<class F>
-struct ctx_task_func_impl : ctx_task_func {
-    const F& f;
-    ctx_task_func_impl(const F& f_) : f(f_) {}
-    virtual void run_task() { f(); }
-};
+typedef std::function<void(void)> ctx_task_func;
 struct ctx_task_node_ {
     ctx_task_func* func;
     ctx_task_node_* next;
@@ -112,14 +87,14 @@ struct ctx_task_node_ {
 void ctx_invoke_(ctx_task_node_* head, ct_canceller* c=0);
 template<typename First, typename... Rest>
 void ctx_invoke_(ctx_task_node_* head, const First& first, Rest... rest) {
-    ctx_task_func_impl<First> func(first);
+    ctx_task_func func(first);
     ctx_task_node_ new_head = { &func, head };
     ctx_invoke_(&new_head, rest...);
 }
 /* ...and ctx_invoke itself. */
 template<typename First, typename... Rest>
 void ctx_invoke(const First& first, Rest... rest) {
-    ctx_task_func_impl<First> func(first);
+    ctx_task_func func(first);
     ctx_task_node_ head = { &func, 0 };
     ctx_invoke_(&head, rest...);
 }

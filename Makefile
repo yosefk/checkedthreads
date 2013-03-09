@@ -20,4 +20,8 @@ help:
 	@echo make valgrind " # build the valgrind tool"
 	@echo make tests "    # test the libraries and the valgrind tool"
 	@echo make clean "    # remove bin/, lib/, and obj/"
+my:
+	@echo -n "go "
+day:
+	@echo ahead.
 

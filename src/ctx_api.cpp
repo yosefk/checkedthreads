@@ -4,16 +4,16 @@
 
 void ctx_for_ind_func(int ind, void* context) {
     ctx_ind_func* f = (ctx_ind_func*)context;
-    f->on_index(ind);
+    (*f)(ind);
 }
 
-void ctx_for_(int n, const ctx_ind_func& f, ct_canceller* c) {
+void ctx_for(int n, const ctx_ind_func& f, ct_canceller* c) {
     ct_for(n, ctx_for_ind_func, (void*)&f, c);
 }
 
 void ctx_invoke_ind_func(int ind, void* context) {
     ctx_task_func** tasks = (ctx_task_func**)context;
-    tasks[ind]->run_task();
+    (*tasks[ind])();
 }
 
 void ctx_invoke_(ctx_task_node_* head, ct_canceller* c) {
