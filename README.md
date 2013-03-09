@@ -3,8 +3,8 @@ checkedthreads
 
 checkedthreads is a fork-join parallelism framework providing:
 
-* **A simple API** for parallelizing loops and function calls,
-* **Automatic load balancing** across the available cores,
+* **A simple API** - nested, cancellable parallel loops and function calls.
+* **Automatic load balancing** across the available cores.
 * **Automated race detection** using debugging schedulers and Valgrind-based instrumentation.
 
 What race conditions can be found?
@@ -21,8 +21,8 @@ There are more details below; the upshot is that every race condition will be fo
 * It could **ever** manifest on the given inputs.
 * The bug is actually a race condition :-) (What looks like a race condition but isn't a
   race condition? Consider using uninitialized memory returned
-  by malloc. This is a bug regardless of concurrency. This also leads to non-deterministic
-  results in concurrent programs. But the bug is not a race condition, and while
+  by malloc. This is a bug regardless of parallelism. This also leads to non-deterministic
+  results in parallel programs. But the bug is not a race condition, and while
   checkedthreads may help find the bug, no guarantees are made - unlike with pure race conditions.)
 
 Nice features
@@ -34,8 +34,8 @@ Microsoft PPL, Cilk, OpenMP or GNU libstdc++ parallel mode. How to choose a fram
 Here are some nice features of checkedthreads; you can compare other frameworks' features
 to this list as you shop around:
 
-* **Guaranteed** bug detection
-* Integration with other framework
+* Pretty much **guaranteed** bug detection
+* Integration with other frameworks
 * Dynamic load balancing
 * Custom schedulers
 * A C89 and a C++11 API
@@ -64,7 +64,8 @@ Details:
 * **A C89 as well as a C++11 API**. No compiler extensions (pragmas, keywords, etc.) are involved,
   and while C++11 lambdas and variadic templates are used when available to provide some syntactic
   sugar, the underlying C89 API is useable directly as well.
-* **Free** as in no license, no charge, and no restrictions on how the code may be used.
+* **Free** as in no license, no charge, and no restrictions on how the code may be used. Also
+  no warranty of course.
 * **Portability**. Very little is assumed about the target platform. It is enough to have a C89
   compiler and an address space shared by a bunch of threads - in fact you don't even need "threads"
   as in "an OS with preemptive scheduling"; you could rather easily port checkedthreads to run
@@ -72,8 +73,20 @@ Details:
   Linux [Ubuntu 12]; please tell if you have problems using it on another platform or if you
   want it to be easier to build it on another platform.)
 
+Another nice feature, currently, is simplicity and small size, but these were known to
+transform into complexity and large size in the past; an effort will be made to avoid that...
+
+There are also missing features - please tell if a feature you need is missing. Making a list
+of everything *not* there is a tad hard... one biggie, currently, is concurrency - no means
+are provided to wait for events except for issuing a blocking call (which "steals" a thread from
+the underlying thread pool, so it's not any good, really). Generally concurrency
+is not currently a use case: checkedthreads
+is a framework for *parallelizing computational code* which does not interact with the external world.
+
 API
 ===
+
+
 
 ```C++
 /* C: ct_for(10, &callback, &args); */
