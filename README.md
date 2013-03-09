@@ -1,7 +1,11 @@
 checkedthreads
 ==============
 
-checkedthreads: no race condition goes unnoticed! API, auto load balancing, Valgrind-based checking.
+checkedthreads is a fork-join parallelism framework providing:
+
+* **A simple API** for parallelizing loops and function calls,
+* **Automatic load balancing** across the available cores,
+* **Automated race detection** using debugging schedulers and Valgrind-based instrumentation.
 
 What race conditions can be found?
 ==================================
@@ -21,27 +25,37 @@ There are more details below; the upshot is that every race condition will be fo
   results in concurrent programs. But the bug is not a race condition, and while
   checkedthreads may help find the bug, no guarantees are made - unlike with pure race conditions.)
 
-Why this framework?
-===================
+Nice features
+=============
 
-checkedthreads is a fork-join parallelism framework not unlike many others, such as Intel TBB,
-Microsoft PPL, Cilk, OpenMP or GNU libstdc++ parallel mode. Why would one choose checkedthreads?
+checkedthreads is a fork-join framework not unlike many others, such as Intel TBB,
+Microsoft PPL, Cilk, OpenMP or GNU libstdc++ parallel mode. How to choose a framework?
 
-Here are some checkedthreads features you may find useful, and which may compell one to use
-checkedthreads if a desirable subset of these features is not available in another framework:
+Here are some nice features of checkedthreads; you can compare other frameworks' features
+to this list as you shop around:
+
+* **Guaranteed** bug detection
+* Integration with other framework
+* Dynamic load balancing
+* Custom schedulers
+* A C89 and a C++11 API
+* "Free" as in "do whatever you want with it"
+* Easily portable (at least in theory)
+
+Details:
 
 * **Guaranteed bug detection**. Concurrent imperative programs have a bad reputation because of
-  hard-to-chase bugs. For checkedthreads, easy debugging is a top priority: the API is designed
+  hard-to-chase bugs. For checkedthreads, **easy debugging is a top priority**: the API is designed
   to make it possible to find **all** concurrency bugs that could ever manifest on given data,
   and a Valgrind-based checker is provided that does so.
 * **Integration with other frameworks**. If your code already uses TBB or OpenMP, you can have
-  checkedthreads use TBB or OpenMP to run the tasks you create with the checkedthreads API.
-  This way you can use checkedthreads alongside another framework without the two fighting over
-  the machine. (Please tell if you'd like to have checkedthreads use another framework such as PPL.)
+  checkedthreads rely on TBB or OpenMP to run the tasks you create with the checkedthreads API.
+  This way, you can use checkedthreads alongside another framework without the two fighting over
+  the machine. (Please tell if you'd like to use checkedthreads alongside another framework such as PPL.)
 * **Dynamic load balancing**. checkedthreads comes with its own scheduler where all tasks are
   put in a single queue and processed by the thread from the workers pool which is "the quickest
   to dequeue it". (When using TBB or OpenMP, checkedthreads tries to approximate this scheduling
-  policy.) A single queue is not necessarily scalable to a thousand of cores, but it otherwise provides
+  policy.) A single queue is not necessarily scalable to 1000 cores, but it otherwise provides
   optimal load balancing: work gets done as soon as someone is available to do it. So you get nice
   performance on practical hardware configurations.
 * **Custom schedulers**: if you prefer a different scheduling policy, you can implement a scheduler
