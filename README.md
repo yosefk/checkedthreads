@@ -33,7 +33,7 @@ All of them! checkedthreads provides two verification methods:
 * **Thorough verification** using Valgrind-based instrumentation that monitors memory accesses
   and flags accesses to data owned by another thread.
 
-There are more details below; the upshot is that every race condition will be found if:
+There are more details [below](#how-race-detection-works); the upshot is that every race condition will be found if:
 
 * It could **ever** manifest on the given inputs.
 * The bug is actually a race condition :-) (What looks like a race condition but isn't a
@@ -257,7 +257,7 @@ How race detection works
 
 As mentioned above, there are two verification methods - a fast one and a thorough one.
 
-The fast one is, run the program twice - first with **CT_SCHED=shuffle** and then with **CT_SCHED=shuffle
+The fast one is, run the program twice - first under **env CT_SCHED=shuffle CT_RAND_REV=0** and then under **env CT_SCHED=shuffle
 CT_RAND_REV=1**, and compare the results. Different results indicate a bug, because results should not
 be affected by scheduling order (in production, a parallel scheduler is used and it can result in things
 running in any of the two orders you just tried - as well as in many other orders).
@@ -274,6 +274,11 @@ However, this method has two drawbacks:
 * **Bugs are not pinpointed**. Different results prove that there's a bug, but they don't tell you where it is.
 
 Because of these drawbacks, a second, slower and more thorough verification method is available:
+
+```
+env CT_SCHED=valgrind CT_RAND_REV=0 valgrind --tool=checkedthreads your-program your-arguments
+env CT_SCHED=valgrind CT_RAND_REV=1 valgrind --tool=checkedthreads your-program your-arguments
+```
 
 Planned features
 ================
