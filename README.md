@@ -280,6 +280,35 @@ env CT_SCHED=valgrind CT_RAND_REV=0 valgrind --tool=checkedthreads your-program 
 env CT_SCHED=valgrind CT_RAND_REV=1 valgrind --tool=checkedthreads your-program your-arguments
 ```
 
+This runs valgrind with the checkedthreads tool, which monitors every memory access. When a thread accesses
+something concurrently previously written by another thread, the tool prints the call stack - that's where
+a bug is:
+
+```
+checkedthreads: error - thread 56 accessed 0x7FF000340 [0x7FF000340,4], owned by 55
+==2919==    at 0x40202C: std::_Function_handler<void (int), main::{lambda(int)#1}>::_M_invoke(std::_Any_data const&, int) (bug.cpp:16)
+==2919==    by 0x403293: ct_valgrind_for_loop (valgrind_imp.c:62)
+==2919==    by 0x4031C8: ct_valgrind_for (valgrind_imp.c:82)
+==2919==    by 0x40283C: ct_for (ct_api.c:177)
+==2919==    by 0x401E9D: main (bug.cpp:20)
+```
+
+That "*previously* written" bit is why you need to run the program twice - after all, writes don't
+always happen *after* reads. If thread A reads from address X, and then thread B writes to X,
+the tool won't notice (it only remembers the last thread which wrote to a location). However, if you reverse
+the schedule with CT_RAND_REV=1, then B will write to X *before* A reads from X, and the tool will flag that
+read as a bug.
+
+Note that there aren't any actual threads - like the run under CT_SCHED=shuffle, this run is serial.
+The Valgrind tool maps ct_for's loop indexes and ct_invoke's function calls to thread IDs, so that those
+IDs can fit into a single byte. So "another thread accessing something" means a loop index or a function call
+that could be processed in parallel to the currently running code.
+
+This second method is slower, but it doesn't miss any bugs that could ever occur with the given inputs,
+and it pinpoints the bugs. So it's a good idea to run the program under Valgrind on a few inputs
+in case plain shuffling misses bugs. It's also useful to run the program under Valgrind on those inputs
+where shuffling discovered bugs - to pinpoint those bugs.
+
 Planned features
 ================
 
