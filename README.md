@@ -255,6 +255,26 @@ useful is explained in the next section, which also shows how to set these env v
 How race detection works
 ========================
 
+As mentioned above, there are two verification methods - a fast one and a thorough one.
+
+The fast one is, run the program twice - first with **CT_SCHED=shuffle** and then with **CT_SCHED=shuffle
+CT_RAND_REV=1**, and compare the results. Different results indicate a bug, because results should not
+be affected by scheduling order (in production, a parallel scheduler is used and it can result in things
+running in any of the two orders you just tried - as well as in many other orders).
+
+Using this method, you can run the program on many inputs (the program runs serially with the shuffle
+scheduler, so you can spawn a process per core to fully utilize machines used for testing). Many inputs
+and no result differences give you a rather high confidence that your program is correct.
+
+However, this method has two drawbacks:
+
+* **Some bugs go unnoticed**. For instance, updating a shared accumulator from several iterations of a loop
+  may not work with a parallel scheduler. But such updates will yield the same results under all serial schedules.
+  So will the use of a shared temporary buffer.
+* **Bugs are not pinpointed**. Different results prove that there's a bug, but they don't tell you where it is.
+
+Because of these drawbacks, a second, slower and more thorough verification method is available:
+
 Planned features
 ================
 
