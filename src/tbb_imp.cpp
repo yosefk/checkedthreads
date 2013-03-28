@@ -55,7 +55,9 @@ void ctx_tbb_for(int n, ct_ind_func f, void* context, ct_canceller* c) {
        that is, a thread does get stuck with heavy work which is not stolen.
        */
     int grain_size = 1;
-    tbb::parallel_for(tbb::blocked_range<int>(0, n, grain_size), invoker, tbb::simple_partitioner());
+    tbb::task_group_context ctx(tbb::task_group_context::isolated);
+    tbb::parallel_for(tbb::blocked_range<int>(0, n, grain_size), invoker,
+                      tbb::simple_partitioner(), ctx);
 }
 
 ct_imp g_ct_tbb_imp = {
