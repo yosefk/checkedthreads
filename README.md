@@ -249,9 +249,8 @@ Environment variables
 
 **$CT_RAND_SEED**: a seed for order-randomizing schedulers (shuffle & valgrind).
 
-**$CT_RAND_REV**: if non-zero, each random index permutation will be reversed. Useful because an order and its
-reverse are sufficient to make a load-after-store sequence out of any store-after-load sequence (why *that* is
-useful is explained in the next section, which also shows how to set these env vars in order to detect races.)
+**$CT_RAND_REV**: if non-zero, each random index permutation will be reversed. When it's useful
+is explained in the next section.
 
 How race detection works
 ========================
