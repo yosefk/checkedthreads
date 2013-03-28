@@ -1,10 +1,31 @@
 checkedthreads
 ==============
 
-checkedthreads: no race condition goes unnoticed! API, auto load balancing, Valgrind-based checking.
+checkedthreads is a fork-join parallelism framework providing:
 
-What race conditions can be found?
-==================================
+* **Automated race detection** using debugging schedulers and Valgrind-based instrumentation.
+* **Automatic load balancing** across the available cores.
+* **A simple API** - nested, cancellable parallel loops and function calls.
+
+If you have dozens of developers working on millions of lines of
+multithreaded code, checkedthreads is supposed to let you ship new versions **without worrying about parallelism bugs**.
+It's based on a decade of experience in that kind of environment.
+
+Contents
+========
+
+* [What race conditions will be found?](#what-race-conditions-will-be-found)
+* [Nice features](#nice-features)
+* [API](#api)
+* [Environment variables](#environment-variables)
+* [How race detection works - TODO](#how-race-detection-works)
+* [Building and installing - TODO](#building-and-installing)
+* [Planned features](#planned-features)
+* [Coding style](#coding-style)
+* [Support/contact](#supportcontact)
+
+What race conditions will be found?
+===================================
 
 All of them! checkedthreads provides two verification methods:
 
@@ -12,144 +33,291 @@ All of them! checkedthreads provides two verification methods:
 * **Thorough verification** using Valgrind-based instrumentation that monitors memory accesses
   and flags accesses to data owned by another thread.
 
-There are more details below; the upshot is that every race condition will be found if:
+There are more details [below](#how-race-detection-works); the upshot is that every race condition will be found if:
 
 * It could **ever** manifest on the given inputs.
 * The bug is actually a race condition :-) (What looks like a race condition but isn't a
   race condition? Consider using uninitialized memory returned
-  by malloc. This is a bug regardless of concurrency. This also leads to non-deterministic
-  results in concurrent programs. But the bug is not a race condition, and while
-  checkedthreads may help find the bug, no guarantees are made - unlike with pure race conditions.)
+  by malloc. This is a bug regardless of parallelism. This also leads to non-deterministic
+  results in parallel programs. But the bug is not a race condition - it's a memory initialization problem.
+  So while checkedthreads may help find the bug, no guarantees are made - unlike with pure race conditions.)
 
-Why this framework?
-===================
+Nice features
+=============
 
-checkedthreads is a fork-join parallelism framework not unlike many others, such as Intel TBB,
-Microsoft PPL, Cilk, OpenMP or GNU libstdc++ parallel mode. Why would one choose checkedthreads?
+checkedthreads is a fork-join framework not unlike many others, such as Intel TBB,
+Microsoft PPL, Cilk, OpenMP or GNU libstdc++ parallel mode. How to choose a framework?
 
-Here are some checkedthreads features you may find useful, and which may compell one to use
-checkedthreads if a desirable subset of these features is not available in another framework:
+Here are some nice features of checkedthreads; you can compare other frameworks' features
+to this list as you shop around:
+
+* Pretty much **guaranteed bug detection**
+* Integration with other frameworks
+* Dynamic load balancing
+* Custom schedulers
+* A **C89** and a **C++11** API
+* "Free" as in "do whatever you want with it"
+* Easily portable (at least in theory)
+
+Details:
 
 * **Guaranteed bug detection**. Concurrent imperative programs have a bad reputation because of
   hard-to-chase bugs. For checkedthreads, easy debugging is a top priority: the API is designed
-  to make it possible to find **all** concurrency bugs that could ever manifest on given data,
+  to make it possible to automatically find **all** concurrency bugs that could ever manifest on given data,
   and a Valgrind-based checker is provided that does so.
 * **Integration with other frameworks**. If your code already uses TBB or OpenMP, you can have
-  checkedthreads use TBB or OpenMP to run the tasks you create with the checkedthreads API.
-  This way you can use checkedthreads alongside another framework without the two fighting over
-  the machine. (Please tell if you'd like to have checkedthreads use another framework such as PPL.)
+  checkedthreads rely on TBB or OpenMP to run the tasks you create with the checkedthreads API.
+  This way, you can use checkedthreads alongside another framework without the two fighting over
+  the machine. (Please tell if you'd like to use checkedthreads alongside another framework such as PPL.)
 * **Dynamic load balancing**. checkedthreads comes with its own scheduler where all tasks are
-  put in a single queue and processed by the thread from the workers pool which is "the quickest
+  put in a single queue and processed by the worker thread which is "the quickest
   to dequeue it". (When using TBB or OpenMP, checkedthreads tries to approximate this scheduling
-  policy.) A single queue is not necessarily scalable to a thousand of cores, but it otherwise provides
-  optimal load balancing: work gets done as soon as someone is available to do it. So you get nice
-  performance on practical hardware configurations.
+  policy.) A single queue is not necessarily scalable to 1000 cores, but it otherwise provides
+  optimal load balancing: work gets done as soon as someone is available to do it. The upshot is that
+  you get nice performance on practical hardware configurations.
 * **Custom schedulers**: if you prefer a different scheduling policy, you can implement a scheduler
   of your own - you need to implement the same simple interface that is used to implement
   schedulers supplied together with checkedthreads.
-* **A C89 as well as a C++11 API**. No compiler extensions (pragmas, keywords, etc.) are involved,
-  and while C++11 lambdas and variadic templates are used when available to provide some syntactic
+* **A C89 as well as a C++11 API**. No compiler extensions (pragmas, keywords, etc.) are involved.
+  While C++11 lambdas and variadic templates are used to provide some syntactic
   sugar, the underlying C89 API is useable directly as well.
-* **Free** as in no license, no charge, and no restrictions on how the code may be used.
+* **Free** as in no license, no charge, and no restrictions on how the code may be used. Also
+  no warranty of course.
 * **Portability**. Very little is assumed about the target platform. It is enough to have a C89
-  compiler and an address space shared by a bunch of threads - in fact you don't even need "threads"
+  compiler and an address space shared by a bunch of threads. In fact, you don't even need "threads"
   as in "an OS with preemptive scheduling"; you could rather easily port checkedthreads to run
   on a machine without any OS. (However, currently checkedthreads is only developed and tested on
   Linux [Ubuntu 12]; please tell if you have problems using it on another platform or if you
-  want it to be easier to build it on another platform.)
+  want it to be easier to build on another platform.)
+
+Another nice feature, at the moment, is simplicity and small size. However, these were known to
+transform into complexity and large size in the past. An effort will be made to avoid that.
+
+There are also missing features - please tell if a feature you need is missing. Making a list
+of everything *not* there is a tad hard... One biggie, currently, is concurrency. No means
+are provided to wait for events except for issuing a blocking call (which "steals" a thread from
+the underlying thread pool, so it's not any good, really). Generally concurrency
+is not currently a use case: checkedthreads
+is a framework for *parallelizing computational code* which does not interact much with the external world.
 
 API
 ===
 
-```C++
-/* C: ct_for(10, &callback, &args); */
-typedef void (*ct_ind_func)(int ind, void* context);
-void ct_for(int n, ct_ind_func f, void* context);
+In a nutshell:
 
-//C++: ctx_for(10, [=] (int i) { use(i, args); });
-typedef std::function<void(int)> ctx_ind_func;
-void ctx_for(int n, const ctx_ind_func& f);
+* You can parallelize **loops** (with ct_for) and **function calls** (with ct_invoke).
+* Both parallel loops and function calls can be **nested**.
+* A parallel loop or a set of parallel function calls can be **cancelled** before they complete.
+
+Examples using the C++11 API:
+
+```C++
+ctx_for(100, [&](int i) {
+    ctx_for(100, [&](int j) {
+        array[i][j] = i*j;
+    });
+});
 ```
 
-* Reductions are somewhat low-priority:
-  If you have a modest amount of cores (4-8), then reductions use an even smaller number of cores. Also, many reductions
-  can be handled using another foreach: for instance, every thread computes a histogram of a subset of the data,
-  then another foreach is used to sum a different subrange of the histogram.
-* In the histogram example, we can have per-thread histograms accessible past the end of foreach, which means
-  we need off-stack thread-local storage; and we may want to have a concurrent histogram instead. The latter
-  is easy to do with an atomic_add (easier than a concurrent hash table...), but not trivial to verify - we
-  need a way to make sure that the side effects are commutative, and that the data structure isn't read in the
-  same loop that modifies it.
+Absolutely boneheaded code, but you get the idea. i and j go from 0 to 99. Currently there's no way to specify
+a start other than 0 or an increment other than 1. There's also no way to control "grain size" -
+**each index is a separately scheduled task**. So a non-trivial amount of work should be done per index,
+or the scheduling overhead will dwarf any gains from running on several cores.
 
-Thread-safe data structures
-===========================
+For a better example, here's parallel sorting:
+```C++
+template<class T>
+void quicksort(T* beg, T* end) {
+    if (end-beg >= MIN_PAR) {
+        int piv = *beg, l = 1, r = end-beg;
+        while (l < r) {
+            if (beg[l] <= piv) 
+                l++;
+            else
+                std::swap(beg[l], beg[--r]);
+        }   
+        std::swap(beg[--l], beg[0]);
+        //sort the two parts in parallel:
+        ctx_invoke( 
+            [=] { quicksort(beg, beg+l); },
+            [=] { quicksort(beg+r, end); }
+        );  
+    }
+    else {
+        std::sort(beg, end);
+    }
+}
+```
+Not unlike ctx_for, ctx_invoke calls all the functions it's passed in parallel.
 
-* Commutativity is not always possible to verify (histograms are always OK, but not unordered lists where peope count
-  on the order). This is why we have a random shuffling scheduler.
-* All data structures have a state: RO, WO, RW. If they are RW, then they bomb when used from threads. If they are RO/WO,
-  they bomb when they're written/read.
-* The valgrind checker is simply told to ignore accesses to thread-safe data structures, thus not even attempting
-  to verify if they're actually thread-safe.
+The different
+function calls scheduled by ctx_invoke, as well as the different iterations of ctx_for, **should never
+write to the same memory address** - that is, they should be completely independent. Once ctx_for/invoke
+returns, all the memory updates done by all the iterations/function calls can be used by the caller of
+ctx_for/invoke.
+
+Now a C89 example:
+
+```C
+void set_elem(int i, void* context) {
+    int* array = (int*)context;
+    array[i] = i;
+}
+
+void example(void) {
+    int array[100];
+    ct_for(100, set_elem, array, 0);
+}
+```
+That last "0" is a null pointer to a *canceller* - we'll get to that in a moment. Meanwhile, parallel invoke in C89:
+
+```C
+void a(void* context) { *(int*)context = 1; }
+void b(void* context) { *(int*)context = 2; }
+
+void example(void) {
+    int first, second;
+    ct_task tasks[] = {
+        {a, &first},
+        {b, &second},
+        {0, 0}
+    };
+    ct_invoke(tasks, 0);
+}
+```
+The tasks[] array should have {0,0} as its last element. Again, the "0" argument is the canceller.
+
+Speaking of which - here's an example of actually using cancelling:
+
+```C++
+int pos_of_77 = -1;
+ct_canceller* c = ct_alloc_canceller();
+ctx_for(N, [&](int i) {
+    if(arr[i] == 77) {
+        pos_of_77 = i;
+        ct_cancel(c);
+    }
+}, c);
+ct_free_canceller(c);
+```
+(Again a silly piece of code doing way too little work per index, but no matter.) Notes on cancelling:
+
+* **Everything can be cancelled**: ct_for, ctx_for, ct_invoke, and ctx_invoke can all get a canceller parameter.
+* **A single canceller can cancel many things**: ct_cancel(c) cancels all loops and parallel calls to which c
+  was originally passed.
+* **Nested loops/calls don't automatically inherit the canceller**: when a loop is cancelled, no more iterations
+  will be scheduled - but all iterations which are already in flight will be completed. If such an iteration
+  itself spawns tasks, then those tasks will *not* be canceled - unless the spawning iteration explicitly passed
+  to the tasks it spawned the same canceller which cancelled the loop that the spawner belongs to.
+* **At most one iteration/function call can write something** - otherwise, different results might be produced
+  depending on timing, because cancelling is not deterministic in the sense that different iterations may
+  be cancelled in different runs. For instance, the example above is only correct if arr[] is known to keep
+  at most one value equal to 77.
   
-Task graphs, pipelines, etc.
-============================
+The last thing to note is that you need, before using checkedthreads, to call **ct_init()** - and then
+call **ct_fini()** when you're done. ct_init gets a single argument - the environment; for example:
 
-Parallel for scales and load-balances nicely, it's easy to spell and easy to check. Task graphs and pipelines
-do not scale that well (a 5-stage pipeline has no use for 8 cores), they don't load-balance that well (the
-heaviest task/pipeline stage limits throughput), and they aren't that easy to spell (especially task graphs
-where "graph" is the shape of dependencies). If you're on symmetrical hardware and you're trying to speed up
-a computational process with no I/O, then it's hard to see how parallel fors aren't good enough.
-(Task graphs can be better in cache utilization if each task have a lot of cached data and each task uses
-the cache fully where a data-parallel system would end up replicating data in many L1 caches. But it still
-doesn't scale and doesn't load-balance.) 
+```C
+ct_env_var env[] = {
+    {"CT_SCHED", "shuffle"},
+    {"CT_RAND_REV", "1"},
+    {0, 0}
+};
+ct_init(env);
+```
+You can pass 0 instead of env; if you do that, $CT_SCHED and $CT_RAND_REV will be looked up using getenv() -
+as will be done for all variables not mentioned in env[] if you do pass it.
 
-Automatic parallelization
-=========================
+The available environment variables and their meaning are discussed in the next section.
 
-...Is nice, because it guarantees correctness. However, shuffling and instrumentation are very close to
-guaranteed correctness, and automatic parallelization is impossible for any popular imperative language
-and furthermore, it can never "fully relieve programmers of parallelism burdens" because iterative algorithms
-must still be manually converted to non-iterative, parallelizable algorithms. A framework with correctness
-achieved using dynamic verification in an existing popular language is not necessarily more expensive to
-adopt than a compiler staticallly guaranteeing correctness that requires to switch to a different
-language or to use a restricted subset of your current language in much of your code.
+Environment variables
+=====================
 
-Data-dependent termination
-==========================
+**$CT_SCHED** is the scheduler to use, and can be one of:
 
-As in, while instead of for; worth looking into.
+* **serial**: run loops serially from 0 to N and call functions first to last.
+* **shuffle**: serial run with a pseudo-random, deterministic order of iterations and function calls.
+* **valgrind**: same schedule as shuffle, but also communicates with the Valgrind checker, telling it what's what.
+* **tbb**: schedule tasks using TBB's *simple_partitioner* with grain size of 1.
+* **openmp**: schedule tasks using OpenMP's *#pragma omp parallel for schedule(dynamic,1)*.
+* **pthreads** (default): schedule tasks using a worker pool of pthreads and a single shared queue.
 
-Races will be flagged; not necessarily bugs that are /also/ races
-=================================================================
+**$CT_THREADS** is the worker pool size (relevant for the parallel schedulers); the default is a thread per core.
 
-Some bugs are *also* race conditions. For instance, mallocing and accessing uninitialized memory
-will lead to different results depending on timing; it's also a bug in a serial program. Or,
-out of bounds accesses can yield different results depending on timing; they're also bugs
-in a serial program. Or, access to on-stack data after the function that allocated it returns, etc.
+**$CT_VERBOSE**: at 2, all indexes are printed; at 1, loops/invokes; at 0 (default), nothing is printed.
 
-These bugs will not necessarily be flagged as races by the Valgrind tool. What will be certainly be flagged
-as a race is something that has a chance to not be a bug in a serial program but also has a chance
-to be a race condition in its parallel version. For instance, access to initialized data through
-"legitimatly" obtained pointers will certainly be flagged as a race if there's a chance for it
-to be a race.
+**$CT_RAND_SEED**: a seed for order-randomizing schedulers (shuffle & valgrind).
 
-TODO
-====
+**$CT_RAND_REV**: if non-zero, each random index permutation will be reversed. Useful because an order and its
+reverse are sufficient to make a load-after-store sequence out of any store-after-load sequence (why *that* is
+useful is explained in the next section, which also shows how to set these env vars in order to detect races.)
 
-PIC code support and a libcheckedthreads.so, possibly. Even "without shared libraries",
-we need to handle the .got.plt business because as long as you don't use -static, which
-you can't if you want valgrind to work, you're going to have these in standard libraries.
+How race detection works
+========================
 
-automatic config and test. remove the dependence on C++11 for the library?
+As mentioned above, there are two verification methods - a fast one and a thorough one.
+
+The fast one is, run the program twice - first under **env CT_SCHED=shuffle CT_RAND_REV=0** and then under **env CT_SCHED=shuffle
+CT_RAND_REV=1**, and compare the results. Different results indicate a bug, because results should not
+be affected by scheduling order (in production, a parallel scheduler is used and it can result in things
+running in any of the two orders you just tried - as well as in many other orders).
+
+Using this method, you can run the program on many inputs (the program runs serially with the shuffle
+scheduler, so you can spawn a process per core to fully utilize machines used for testing). Many inputs
+and no result differences give you a rather high confidence that your program is correct.
+
+However, this method has two drawbacks:
+
+* **Some bugs go unnoticed**. For instance, updating a shared accumulator from several iterations of a loop
+  may not work with a parallel scheduler. But such updates will yield the same results under all serial schedules.
+  So will the use of a shared temporary buffer.
+* **Bugs are not pinpointed**. Different results prove that there's a bug, but they don't tell you where it is.
+
+Because of these drawbacks, a second, slower and more thorough verification method is available:
+
+```
+env CT_SCHED=valgrind CT_RAND_REV=0 valgrind --tool=checkedthreads your-program your-arguments
+env CT_SCHED=valgrind CT_RAND_REV=1 valgrind --tool=checkedthreads your-program your-arguments
+```
+
+This runs valgrind with the checkedthreads tool, which monitors every memory access. When a thread accesses
+something concurrently previously written by another thread, the tool prints the call stack - that's where
+a bug is:
+
+```
+checkedthreads: error - thread 56 accessed 0x7FF000340 [0x7FF000340,4], owned by 55
+==2919==    at 0x40202C: std::_Function_handler<void (int), main::{lambda(int)#1}>::_M_invoke(std::_Any_data const&, int) (bug.cpp:16)
+==2919==    by 0x403293: ct_valgrind_for_loop (valgrind_imp.c:62)
+==2919==    by 0x4031C8: ct_valgrind_for (valgrind_imp.c:82)
+==2919==    by 0x40283C: ct_for (ct_api.c:177)
+==2919==    by 0x401E9D: main (bug.cpp:20)
+```
+
+That "*previously* written" bit is why you need to run the program twice - after all, writes don't
+always happen *after* reads. If thread A reads from address X, and then thread B writes to X,
+the tool won't notice (it only remembers the last thread which wrote to a location). However, if you reverse
+the schedule with CT_RAND_REV=1, then B will write to X *before* A reads from X, and the tool will flag that
+read as a bug.
+
+Note that there aren't any actual threads - like the run under CT_SCHED=shuffle, this run is serial.
+The Valgrind tool maps ct_for's loop indexes and ct_invoke's function calls to thread IDs, so that those
+IDs can fit into a single byte. So "another thread accessing something" means a loop index or a function call
+that could be processed in parallel to the currently running code.
+
+This second method is slower, but it doesn't miss any bugs that could ever occur with the given inputs,
+and it pinpoints the bugs. So it's a good idea to run the program under Valgrind on a few inputs
+in case plain shuffling misses bugs. It's also useful to run the program under Valgrind on those inputs
+where shuffling discovered bugs - to pinpoint those bugs.
 
 Planned features
 ================
 
 Planned features not yet avaialable:
 
-* Atomic operations
-* Thread-local storage
-* Concurrent collections
+* Proper checking of cancelling (cancelling is only OK if at most one thread writes things)
+* Custom allocator interface (to tell the checker when memory is allocated/freed)
+* A compiler (LLVM/gcc) pass in addition to the dynamic Valgrind instrumentation
+* A Windows build and integration with PPL
 
 Coding style
 ============
@@ -160,3 +328,8 @@ Coding style
 * Everything is lowercase, underscore_separated. Macros mostly UPPERCASE.
 * Valgrind tool code (at valgrind/) should use Valgrind style.
 * Style isn't that important.
+
+Support/contact
+===============
+
+<Yossi.Kreinin@gmail.com>/<http://yosefk.com>. Feel free to contact if you run into any sort of problem using checkedthreads.
