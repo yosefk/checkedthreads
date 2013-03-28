@@ -8,7 +8,8 @@ checkedthreads is a fork-join parallelism framework providing:
 * **A simple API** - nested, cancellable parallel loops and function calls.
 
 If you have dozens of developers working on millions of lines of
-multithreaded code, checkedthreads is supposed to let you ship new versions **without worrying about parallelism bugs**.
+multithreaded code, checkedthreads will let you painlessly parallelize the code -
+and then continuously ship new versions **without worrying about parallelism bugs**.
 It's based on a decade of experience in that kind of environment.
 
 Contents
@@ -54,10 +55,10 @@ to this list as you shop around:
 * Pretty much **guaranteed bug detection**
 * Integration with other frameworks
 * Dynamic load balancing
-* Custom schedulers
 * A **C89** and a **C++11** API
 * "Free" as in "do whatever you want with it"
 * Easily portable (at least in theory)
+* Custom schedulers
 
 Details:
 
@@ -75,9 +76,6 @@ Details:
   policy.) A single queue is not necessarily scalable to 1000 cores, but it otherwise provides
   optimal load balancing: work gets done as soon as someone is available to do it. The upshot is that
   you get nice performance on practical hardware configurations.
-* **Custom schedulers**: if you prefer a different scheduling policy, you can implement a scheduler
-  of your own - you need to implement the same simple interface that is used to implement
-  schedulers supplied together with checkedthreads.
 * **A C89 as well as a C++11 API**. No compiler extensions (pragmas, keywords, etc.) are involved.
   While C++11 lambdas and variadic templates are used to provide some syntactic
   sugar, the underlying C89 API is useable directly as well.
@@ -89,6 +87,9 @@ Details:
   on a machine without any OS. (However, currently checkedthreads is only developed and tested on
   Linux [Ubuntu 12]; please tell if you have problems using it on another platform or if you
   want it to be easier to build on another platform.)
+* **Custom schedulers**: if you prefer a different scheduling policy, you can implement a scheduler
+  of your own - you need to implement the same 3-function interface that is used to implement
+  the schedulers supplied together with checkedthreads.
 
 Another nice feature, at the moment, is simplicity and small size. However, these were known to
 transform into complexity and large size in the past. An effort will be made to avoid that.
@@ -293,21 +294,19 @@ checkedthreads: error - thread 56 accessed 0x7FF000340 [0x7FF000340,4], owned by
 ==2919==    by 0x401E9D: main (bug.cpp:20)
 ```
 
-That "*previously* written" bit is why you need to run the program twice - after all, writes don't
-always happen *after* reads. If thread A reads from address X, and then thread B writes to X,
-the tool won't notice (it only remembers the last thread which wrote to a location). However, if you reverse
-the schedule with CT_RAND_REV=1, then B will write to X *before* A reads from X, and the tool will flag that
-read as a bug.
-
 Note that there aren't any actual threads - like the run under CT_SCHED=shuffle, this run is serial.
-The Valgrind tool maps ct_for's loop indexes and ct_invoke's function calls to thread IDs, so that those
+The Valgrind tool maps ct_for's loop indexes and ct_invoke's function calls to thread IDs, such that those
 IDs can fit into a single byte. So "another thread accessing something" means a loop index or a function call
-that could be processed in parallel to the currently running code.
+that *could* run in parallel to the currently running code.
 
-This second method is slower, but it doesn't miss any bugs that could ever occur with the given inputs,
-and it pinpoints the bugs. So it's a good idea to run the program under Valgrind on a few inputs
-in case plain shuffling misses bugs. It's also useful to run the program under Valgrind on those inputs
+This second method is slower, but it **doesn't miss any bugs that could ever occur with the given inputs** -
+and it **pinpoints** the bugs. So it's a good idea to run the program under Valgrind on a few inputs
+in case plain shuffling misses bugs. And it's also useful to run the program under Valgrind on those inputs
 where shuffling discovered bugs - to pinpoint those bugs.
+
+This is all you strictly need to know to verify your code. If you want more details - for instance,
+if you want to be convinced that indeed the bug coverage is as good as claimed above - you can read
+a detailed explanation [here](http://yosefk.com/blog/checkedthreads-bug-free-shared-memory-parallelism.html).
 
 Planned features
 ================
@@ -326,7 +325,8 @@ Coding style
 * Globals prefixed with g_ct/g_ctx; no static variables (all are extern).
 * Indentation: 1TBS, 4 spaces per level, no hard tabs.
 * Everything is lowercase, underscore_separated. Macros mostly UPPERCASE.
-* Valgrind tool code (at valgrind/) should use Valgrind style.
+* Valgrind tool code (at valgrind/) should try to use Valgrind style.
+* Code should compile without warnings (I'd use -Werror, but different gcc versions have different warnings.)
 * Style isn't that important.
 
 Support/contact
