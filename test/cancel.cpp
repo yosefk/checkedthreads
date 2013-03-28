@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 
+//a really weird recursive find - for testing...
 int* find(int* a, int n, int lookfor, ct_canceller* c) {
     if(n<5) {
         for(int i=0; i<n; ++i) {

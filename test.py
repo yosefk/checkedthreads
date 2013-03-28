@@ -4,13 +4,14 @@
 * "sleep" should sleep "quickly" with all enabled schedulers (partitioning test)
 * random checker should find bugs.
 * valgrind checker should find bugs.
+* various stuff - like find, sort and accumulate.
 '''
 import os
 import sys
 import build
 import commands
 
-tests = 'bug.cpp nested.cpp grain.cpp acc.cpp bugs.cpp cancel.cpp sort.cpp'.split()
+tests = 'bug.cpp sleep.cpp nested.cpp grain.cpp acc.cpp cancel.cpp sort.cpp'.split()
 
 with_cpp = 'C++11' in build.enabled
 with_pthreads = 'pthreads' in build.enabled
@@ -69,13 +70,13 @@ def runcommand(command,expected_status=0,expected_output=None):
 
 print '\nrunning tests'
 
-testscripts = 'hello.py bug.py nested.py'.split()
+testscripts = 'hello.py bug.py nested.py sleep.py'.split()
 
 for testscript in testscripts:
     execfile('test/'+testscript)
 
 for test in built:
-    if test=='bug' or test.startswith('hello'):
+    if test in 'bug nested sleep'.split() or test.startswith('hello'):
         continue
     if test == 'sort':
         runtest(test,args=str(1024*1024))
