@@ -319,7 +319,11 @@ a detailed explanation [here](http://yosefk.com/blog/checkedthreads-bug-free-sha
 Building and installing
 =======================
 
-After cloning/downloading sources:
+It is perhaps possible to download binaries for your platform - something I always prefer to do...
+It is recommended that you read the following explanations about building from sources, and then
+decide which parts you want to build and which parts you prefer to download in binary form.
+
+So, after cloning/downloading sources:
 
 ```
 cd checkedthreads
@@ -343,7 +347,10 @@ things must be manually configured to build the Valgrind tool. To do that, edit 
 set the following variables:
 
 * **CT_VALGRIND_SRC_DIR**: the directory with the Valgrind sources. To build the tool, you need
-to download, configure and make Valgrind first.
+to download, configure and make Valgrind first. The Valgrind tool was developed with **Valgrind 3.8.1**;
+the binaries seem to work with 3.7.0 as well but I didn't try to build with the 3.7.0 sources.
+You can download the 3.8.1 sources from [here](http://www.valgrind.org/downloads/valgrind-3.8.1.tar.bz2) or
+[here](http://yosefk.com/checkedthreads/valgrind-3.8.1.tar.bz2).
 * **VALGRIND_LIB**: your system's default (such as /usr/lib/valgrind), or the directory you passed
 to Valgrind's configure with --prefix, or to some other (existing) directory if you wish; the checkedthread tool binaries
 are copied to this directory.
@@ -353,6 +360,9 @@ without sudo.
 Note that **$VALGRIND_LIB** is used by the tests which make runs after building everything - make
 sets this environment variable for all programs it spawns. You may need to explicitly set $VALGRIND_LIB
 when running valgrind --tool=checkedthreads outside make.
+
+Also note that setting, in the shell running make, any of the environment variables mentioned
+in defaults.mk **overrides** their values (hence the name "defaults.mk").
 
 With defaults.mk edited, you can build everything and run tests with:
 
@@ -377,6 +387,13 @@ are built.
 TBB requires C++).
 
 This variety of libraries should hopefully make it easy to link with checkedthreads in any scenario...
+
+At this point you can "install" checkedthreads - that is, copy the files in **lib/** to wherever you keep
+your libraries, and copy the files in **include/** to wherever you keep your header files.
+
+If you want to download binaries instead of building, the available binaries are listed
+[here](http://yosefk.com/checkedthreads/binaries.html). You can choose to download just the Valgrind binaries
+(the slightly gnarlier thing to build) but to build the libraries from sources, for example.
 
 Planned features
 ================
