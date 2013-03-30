@@ -19,7 +19,7 @@ Contents
 * [Nice features](#nice-features)
 * [API](#api)
 * [Environment variables](#environment-variables)
-* [How race detection works - TODO](#how-race-detection-works)
+* [How race detection works](#how-race-detection-works)
 * [Building and installing - TODO](#building-and-installing)
 * [Planned features](#planned-features)
 * [Coding style](#coding-style)
@@ -257,8 +257,15 @@ How race detection works
 
 As mentioned above, there are two verification methods - a fast one and a thorough one.
 
-The fast one is, run the program twice - first under **env CT_SCHED=shuffle CT_RAND_REV=0** and then under **env CT_SCHED=shuffle
-CT_RAND_REV=1**, and compare the results. Different results indicate a bug, because results should not
+The fast one is, run the program twice using two different serial schedules - a random schedule and
+then the same schedule, reversed:
+
+```
+env CT_SCHED=shuffle CT_RAND_REV=0 your-program your-arguments
+env CT_SCHED=shuffle CT_RAND_REV=1 your-program your-arguments
+```
+
+Now compare the results of the two runs. Different results indicate a bug, because results should not
 be affected by scheduling order (in production, a parallel scheduler is used and it can result in things
 running in any of the two orders you just tried - as well as in many other orders).
 
@@ -271,7 +278,7 @@ However, this method has two drawbacks:
 * **Some bugs go unnoticed**. For instance, updating a shared accumulator from several iterations of a loop
   may not work with a parallel scheduler. But such updates will yield the same results under all serial schedules.
   So will the use of a shared temporary buffer.
-* **Bugs are not pinpointed**. Different results prove that there's a bug, but they don't tell you where it is.
+* **Bugs are not pinpointed**. Different results prove that there's a bug - but they don't tell you where it is.
 
 Because of these drawbacks, a second, slower and more thorough verification method is available:
 
@@ -280,9 +287,8 @@ env CT_SCHED=valgrind CT_RAND_REV=0 valgrind --tool=checkedthreads your-program 
 env CT_SCHED=valgrind CT_RAND_REV=1 valgrind --tool=checkedthreads your-program your-arguments
 ```
 
-This runs valgrind with the checkedthreads tool, which monitors every memory access. When a thread accesses
-something concurrently previously written by another thread, the tool prints the call stack - that's where
-a bug is:
+This runs Valgrind with the checkedthreads tool, which monitors every memory access. When a thread accesses
+a location that another thread concurrently wrote, the tool prints the offending call stack:
 
 ```
 checkedthreads: error - thread 56 accessed 0x7FF000340 [0x7FF000340,4], owned by 55
@@ -294,9 +300,9 @@ checkedthreads: error - thread 56 accessed 0x7FF000340 [0x7FF000340,4], owned by
 ```
 
 Note that there aren't any actual threads - like the run under CT_SCHED=shuffle, this run is serial.
-The Valgrind tool maps ct_for's loop indexes and ct_invoke's function calls to thread IDs, such that those
-IDs can fit into a single byte. So "another thread accessing something" means a loop index or a function call
-that *could* run in parallel to the currently running code.
+The Valgrind tool maps ct_for loop indexes and ct_invoke function calls to thread IDs, such that those
+IDs can fit into a single byte. So "two threads accessing the same location" means that the location
+was accessed while processing two loop indexes/function calls that could run in parallel.
 
 This second method is slower, but it **doesn't miss any bugs that could ever occur with the given inputs** -
 and it **pinpoints** the bugs. So it's a good idea to run the program under Valgrind on a few inputs
@@ -306,6 +312,31 @@ where shuffling discovered bugs - to pinpoint those bugs.
 This is all you strictly need to know to verify your code. If you want more details - for instance,
 if you want to be convinced that indeed the bug coverage is as good as claimed above - you can read
 a detailed explanation [here](http://yosefk.com/blog/checkedthreads-bug-free-shared-memory-parallelism.html).
+
+Building and installing
+=======================
+
+After cloning/downloading sources:
+
+```
+cd checkedthreads
+./configure
+```
+
+**configure** is a Python script producing a single output, **include/checkedthreads_config.h**. You can
+edit this file manually; all it has is #defines telling which of the optional features are enabled.
+Note that the build system *checks what's #defined in config.h* and this affects compiler flags, etc.
+
+* **#define CT_CXX11** - enable C++11 (the C++ parts of the code are compiled with -std=c++0x).
+* **#define CT_OPENMP** - enable OpenMP (code is compiled with -fopenmp).
+* **#define CT_TBB** - enable TBB.
+* **#define CT_PTHREAD** - enable pthreads (code is compiled with -pthread).
+
+./configure enables each of these features if it auto-detects that it's supported on your machine;
+you might then want to disable some features even though they're supported on that machine.
+
+At this point, you can build the libraries with **make lib**, but plain **make** won't work yet because
+things must be manually configured to build the Valgrind tool. Here's how:
 
 Planned features
 ================
