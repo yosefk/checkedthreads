@@ -1,7 +1,7 @@
 checkedthreads
 ==============
 
-checkedthreads is a fork-join parallelism framework providing:
+checkedthreads is a fork-join parallelism framework for C and C++ providing:
 
 * **Automated race detection** using debugging schedulers and Valgrind-based instrumentation.
 * **Automatic load balancing** across the available cores.
@@ -22,7 +22,7 @@ Contents
 * [API](#api)
 * [Environment variables](#environment-variables)
 * [How race detection works](#how-race-detection-works)
-* [Building and installing - TODO](#building-and-installing)
+* [Building and installing](#building-and-installing)
 * [Planned features](#planned-features)
 * [Coding style](#coding-style)
 * [Support/contact](#supportcontact)
@@ -49,8 +49,12 @@ There are more details [below](#how-race-detection-works); the upshot is that ev
 Nice features
 =============
 
-checkedthreads is a fork-join framework not unlike many others, such as Intel TBB,
-Microsoft PPL, Cilk, OpenMP or GNU libstdc++ parallel mode. How to choose a framework?
+checkedthreads is a fork-join framework not unlike many others, such as [Intel TBB](http://en.wikipedia.org/wiki/Intel_Threading_Building_Blocks),
+[Microsoft PPL](http://en.wikipedia.org/wiki/Parallel_Patterns_Library),
+[Cilk](http://en.wikipedia.org/wiki/Cilk),
+[OpenMP](http://en.wikipedia.org/wiki/Openmp) or
+[GNU libstdc++ parallel mode](http://gcc.gnu.org/onlinedocs/libstdc++/manual/parallel_mode.html).
+How to choose a framework?
 
 Here are some nice features of checkedthreads; you can compare other frameworks' features
 to this list as you shop around:
@@ -65,10 +69,10 @@ to this list as you shop around:
 
 Details:
 
-* **Guaranteed bug detection**. Concurrent imperative programs have a bad reputation because of
-  hard-to-chase bugs. For checkedthreads, easy debugging is a top priority: the API is designed
-  to make it possible to automatically find **all** concurrency bugs that could ever manifest on given data,
-  and a Valgrind-based checker is provided that does so.
+* **Guaranteed bug detection** is a rare promise in the world of parallel imperative programs,
+  which have a bad reputation because of hard-to-chase bugs. The API is designed with the goal
+  of making it possible to find **all** parallelism bugs that could manifest on given inputs,
+  and tools are provided for doing so.
 * **Integration with other frameworks**. If your code already uses TBB or OpenMP, you can have
   checkedthreads rely on TBB or OpenMP to run the tasks you create with the checkedthreads API.
   This way, you can use checkedthreads alongside another framework without the two fighting over
@@ -79,7 +83,7 @@ Details:
   policy.) A single queue is not necessarily scalable to 1000 cores, but it otherwise provides
   optimal load balancing: work gets done as soon as someone is available to do it. The upshot is that
   you get nice performance on practical hardware configurations.
-* **A C89 as well as a C++11 API**. No compiler extensions (pragmas, keywords, etc.) are involved.
+* **A C89 as well as a C++11 API**. No compiler extensions (#pragmas, keywords, etc.) are involved.
   While C++11 lambdas and variadic templates are used to provide some syntactic
   sugar, the underlying C89 API is useable directly as well.
 * **Free** as in no license, no charge, and no restrictions on how the code may be used. Also
@@ -88,7 +92,7 @@ Details:
   compiler and an address space shared by a bunch of threads. In fact, you don't even need "threads"
   as in "an OS with preemptive scheduling"; you could rather easily port checkedthreads to run
   on a machine without any OS. (However, currently checkedthreads is only developed and tested on
-  Linux [Ubuntu 12]; please tell if you have problems using it on another platform or if you
+  Linux [Ubuntu 12]. Please tell if you have problems using it on another platform, or if you
   want it to be easier to build on another platform.)
 * **Custom schedulers**: if you prefer a different scheduling policy, you can implement a scheduler
   of your own - you need to implement the same 3-function interface that is used to implement
@@ -154,10 +158,9 @@ void quicksort(T* beg, T* end) {
 ```
 Not unlike ctx_for, ctx_invoke calls all the functions it's passed in parallel.
 
-The different
-function calls scheduled by ctx_invoke, as well as the different iterations of ctx_for, **should never
-write to the same memory address** - that is, they should be completely independent. Once ctx_for/invoke
-returns, all the memory updates done by all the iterations/function calls can be used by the caller of
+No function call scheduled by ctx_invoke, nor any iteration of ctx_for, should ever access
+a memory address modified by any other call/iteration - that is, they should be **completely independent**.
+Once ctx_for/invoke returns, all the memory updates done by all the iterations/function calls can be used by the caller of
 ctx_for/invoke.
 
 Now a C89 example:
@@ -213,9 +216,9 @@ ct_free_canceller(c);
   will be scheduled - but all iterations which are already in flight will be completed. If such an iteration
   itself spawns tasks, then those tasks will *not* be canceled - unless the spawning iteration explicitly passed
   to the tasks it spawned the same canceller which cancelled the loop that the spawner belongs to.
-* **At most one iteration/function call can write something** - otherwise, different results might be produced
-  depending on timing, because cancelling is not deterministic in the sense that different iterations may
-  be cancelled in different runs. For instance, the example above is only correct if arr[] is known to keep
+* **At most one iteration/function call can write something to memory** - otherwise, different results might be produced
+  depending on timing, because cancelling is not deterministic (different iterations may
+  be cancelled in different runs). For instance, the example above is only correct if arr[] is known to keep
   at most one value equal to 77.
   
 The last thing to note is that you need, before using checkedthreads, to call **ct_init()** - and then
@@ -229,8 +232,8 @@ ct_env_var env[] = {
 };
 ct_init(env);
 ```
-You can pass 0 instead of env; if you do that, $CT_SCHED and $CT_RAND_REV will be looked up using getenv() -
-as will be done for all variables not mentioned in env[] if you do pass it.
+You can pass 0 instead of env; if you do that, $CT_SCHED and $CT_RAND_REV will be looked up using getenv().
+Similarly, if you do pass an env[], all variables not mentioned in it will be getenv()d.
 
 The available environment variables and their meaning are discussed in the next section.
 
@@ -241,7 +244,7 @@ Environment variables
 
 * **serial**: run loops serially from 0 to N and call functions first to last.
 * **shuffle**: serial run with a pseudo-random, deterministic order of iterations and function calls.
-* **valgrind**: same schedule as shuffle, but also communicates with the Valgrind checker, telling it what's what.
+* **valgrind**: same order as shuffle, but also communicates with the Valgrind checker, telling it what's what.
 * **tbb**: schedule tasks using TBB's *simple_partitioner* with grain size of 1.
 * **openmp**: schedule tasks using OpenMP's *#pragma omp parallel for schedule(dynamic,1)*.
 * **pthreads** (default): schedule tasks using a worker pool of pthreads and a single shared queue.
@@ -252,8 +255,8 @@ Environment variables
 
 **$CT_RAND_SEED**: a seed for order-randomizing schedulers (shuffle & valgrind).
 
-**$CT_RAND_REV**: if non-zero, each random index permutation will be reversed. When it's useful
-is explained in the next section.
+**$CT_RAND_REV**: if non-zero, order-randomizing schedulers will reverse their random index permutations.
+When this is useful is explained in the next section.
 
 How race detection works
 ========================
@@ -270,7 +273,7 @@ env CT_SCHED=shuffle CT_RAND_REV=1 your-program your-arguments
 
 Now compare the results of the two runs. Different results indicate a bug, because results should not
 be affected by scheduling order (in production, a parallel scheduler is used and it can result in things
-running in any of the two orders you just tried - as well as in many other orders).
+running in any of the two orders you just tried - and many other orders).
 
 Using this method, you can run the program on many inputs (the program runs serially with the shuffle
 scheduler, so you can spawn a process per core to fully utilize machines used for testing). Many inputs
@@ -306,9 +309,9 @@ checkedthreads: error - thread 56 accessed 0x7FF000340 [0x7FF000340,4], owned by
 ```
 
 Note that there aren't any actual threads - like the run under CT_SCHED=shuffle, this run is serial.
-The Valgrind tool maps ct_for loop indexes and ct_invoke function calls to thread IDs, such that those
+Rather, the Valgrind tool maps ct_for loop indexes and ct_invoke function calls to thread IDs, such that those
 IDs can fit into a single byte. So "two threads accessing the same location" means that the location
-was accessed while processing two loop indexes/function calls that could run in parallel.
+was accessed from two loop indexes/function calls that could run in parallel.
 
 This second method is slower, but it **doesn't miss any bugs that could ever occur with the given inputs** -
 and it **pinpoints** the bugs. So it's a good idea to run the program under Valgrind on a few inputs
@@ -316,13 +319,16 @@ in case plain shuffling misses bugs. And it's also useful to run the program und
 where shuffling discovered bugs - to pinpoint those bugs.
 
 This is all you strictly need to know to verify your code. If you want more details - for instance,
-if you want to be convinced that indeed the bug coverage is as good as claimed above - you can read
+if you want to be convinced that the bug coverage is indeed as thorough as claimed above - you can read
 a detailed explanation [here](http://yosefk.com/blog/checkedthreads-bug-free-shared-memory-parallelism.html).
+
+Note that there can be no deadlocks, because there are no locks (the only way to synchronize threads is forking -
+the spawning of loops - or joining, the termination of loops). So there's no need for deadlock detection tools.
 
 Building and installing
 =======================
 
-It is perhaps possible to download binaries for your platform - something I always prefer to do...
+It is perhaps possible to [download binaries](http://yosefk.com/checkedthreads/binaries.html) for your platform - something I always prefer to do...
 It is recommended that you read the following explanations about building from sources, and then
 decide which parts you want to build and which parts you prefer to download in binary form.
 
@@ -335,15 +341,15 @@ cd checkedthreads
 
 **configure** is a Python script producing a single output, **include/checkedthreads_config.h**. You can
 edit this file manually; all it has is #defines telling which of the optional features are enabled.
-Note that the build system *checks what's #defined in config.h* and this affects compiler flags, etc.
+Note that make then *checks what's #defined in config.h* and adjusts compiler flags, etc.
 
 * **#define CT_CXX11** - enable C++11 (the C++ parts of the code are compiled with -std=c++0x).
 * **#define CT_OPENMP** - enable OpenMP (code is compiled with -fopenmp).
 * **#define CT_TBB** - enable TBB.
 * **#define CT_PTHREAD** - enable pthreads (code is compiled with -pthread).
 
-./configure enables each of these features if it auto-detects that it's supported on your machine;
-you might then want to disable some features even though they're supported on that machine.
+./configure enables each of these features if it auto-detects that it's supported on your machine.
+You might then want to disable some features (even though they're supported on your machine).
 
 At this point, you can build the libraries with **make build**, but plain **make** won't work yet because
 things must be manually configured to build the Valgrind tool. To do that, edit **defaults.mk** and
@@ -355,14 +361,14 @@ the binaries seem to work with 3.7.0 as well but I didn't try to build with the 
 You can download the 3.8.1 sources from [here](http://www.valgrind.org/downloads/valgrind-3.8.1.tar.bz2) or
 [here](http://yosefk.com/checkedthreads/valgrind-3.8.1.tar.bz2).
 * **VALGRIND_LIB**: your system's default (such as /usr/lib/valgrind), or the directory you passed
-to Valgrind's configure with --prefix, or to some other (existing) directory if you wish; the checkedthread tool binaries
+to Valgrind's configure with --prefix, or some other (existing) directory if you wish. The checkedthread tool binaries
 are copied to this directory.
 * **CT_VALGRIND_CP**: *sudo cp* by default - can be plain cp if you have permissions to access $VALGRIND_LIB
 without sudo.
 
 Note that **$VALGRIND_LIB** is used by the tests which make runs after building everything - make
-sets this environment variable for all programs it spawns. You may need to explicitly set $VALGRIND_LIB
-when running valgrind --tool=checkedthreads outside make.
+sets this environment variable for all the processes it spawns. You may need to explicitly set $VALGRIND_LIB
+when running *valgrind --tool=checkedthreads* outside make.
 
 Also note that setting, in the shell running make, any of the environment variables mentioned
 in defaults.mk **overrides** their values (hence the name "defaults.mk").
@@ -382,11 +388,11 @@ After a successful build, you get libraries at **lib/** as follows:
 * Every library is available both as a static **lib*.a** file a dynamic **lib*.so** file.
 * **libcheckedthreads++** has all the enabled features.
 * **libcheckedthreads** has all the enabled features except those relying on C++ (the C++11 API and the TBB-based scheduler).
-* If OpenMP is enabled, **libcheckedthreads++_openmp** has all the enabled features but only one parallel scheduler,
+* If OpenMP is enabled, **libcheckedthreads++_openmp** is created that has all the enabled features but only one parallel scheduler,
 the one based on OpenMP. **libcheckedthreads_openmp** is similar, except that it also doesn't use C++.
 * Similarly, if pthreads are enabled, **libcheckedthreads++_pthreads** and **libcheckedthreads_pthreads**
 are built.
-* Similarly, if TBB is enabled, **libcheckedthreads++_tbb** is built (but not libcheckedthreads_tbb because
+* Similarly, if TBB is enabled, **libcheckedthreads++_tbb** is built (but *not* libcheckedthreads_tbb, because
 TBB requires C++).
 
 This variety of libraries should hopefully make it easy to link with checkedthreads in any scenario...
