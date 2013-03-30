@@ -12,6 +12,8 @@ multithreaded code, checkedthreads will let you painlessly parallelize the code 
 and then continuously ship new versions **without worrying about parallelism bugs**.
 It's based on a decade of experience in that kind of environment.
 
+![little helper](http://yosefk.com/img/n/checkedthreads-little-helper.jpg "'Little helper' - a physical threading framework with a strong focus on correctness")
+
 Contents
 ========
 
@@ -24,6 +26,7 @@ Contents
 * [Planned features](#planned-features)
 * [Coding style](#coding-style)
 * [Support/contact](#supportcontact)
+* [Image credit](#image-credit)
 
 What race conditions will be found?
 ===================================
@@ -420,3 +423,9 @@ Support/contact
 ===============
 
 <Yossi.Kreinin@gmail.com>/<http://yosefk.com>. Feel free to contact if you run into any sort of problem using checkedthreads.
+
+Image credit
+============
+
+The image at the top of this file shows [Little helper](http://www.chugi.ru/), an award-winning design
+of a physical threading framework with a strong focus on correctness.
