@@ -287,6 +287,9 @@ env CT_SCHED=valgrind CT_RAND_REV=0 valgrind --tool=checkedthreads your-program 
 env CT_SCHED=valgrind CT_RAND_REV=1 valgrind --tool=checkedthreads your-program your-arguments
 ```
 
+(If Valgrind says "failed to start tool 'checkedthreads'", perhaps **$VALGRIND_LIB** should be set
+to point to the right place.)
+
 This runs Valgrind with the checkedthreads tool, which monitors every memory access. When a thread accesses
 a location that another thread concurrently wrote, the tool prints the offending call stack:
 
@@ -335,8 +338,45 @@ Note that the build system *checks what's #defined in config.h* and this affects
 ./configure enables each of these features if it auto-detects that it's supported on your machine;
 you might then want to disable some features even though they're supported on that machine.
 
-At this point, you can build the libraries with **make lib**, but plain **make** won't work yet because
-things must be manually configured to build the Valgrind tool. Here's how:
+At this point, you can build the libraries with **make build**, but plain **make** won't work yet because
+things must be manually configured to build the Valgrind tool. To do that, edit **defaults.mk** and
+set the following variables:
+
+* **CT_VALGRIND_SRC_DIR**: the directory with the Valgrind sources. To build the tool, you need
+to download, configure and make Valgrind first.
+* **VALGRIND_LIB**: your system's default (such as /usr/lib/valgrind), or the directory you passed
+to Valgrind's configure with --prefix, or to some other (existing) directory if you wish; the checkedthread tool binaries
+are copied to this directory.
+* **CT_VALGRIND_CP**: *sudo cp* by default - can be plain cp if you have permissions to access $VALGRIND_LIB
+without sudo.
+
+Note that **$VALGRIND_LIB** is used by the tests which make runs after building everything - make
+sets this environment variable for all programs it spawns. You may need to explicitly set $VALGRIND_LIB
+when running valgrind --tool=checkedthreads outside make.
+
+With defaults.mk edited, you can build everything and run tests with:
+
+```
+make
+```
+
+**make help** will list the available make targets and options (such as **make clean** and **make VERBOSE=1**).
+Currently every build rebuilds everything from scratch (there's
+no dependency checking), which is tolerable at the current size of things.
+
+After a successful build, you get libraries at **lib/** as follows:
+
+** Every library is available both as a static **lib*.a** file a dynamic **lib*.so** file.
+** **libcheckedthreads++** has all the enabled features.
+** **libcheckedthreads** has all the enabled features except those relying on C++ (the C++11 API and the TBB-based scheduler).
+** If OpenMP is enabled, **libcheckedthreads++_openmp** has all the enabled features but only one parallel scheduler,
+the one based on OpenMP. **libcheckedthreads_openmp** is similar, except that it also doesn't use C++.
+** Similarly, if pthreads are enabled, **libcheckedthreads++_pthreads** and **libcheckedthreads_pthreads**
+are built.
+** Similarly, if TBB is enabled, **libcheckedthreads++_tbb** is built (but not libcheckedthreads_tbb because
+TBB requires C++).
+
+This variety of libraries should hopefully make it easy to link with checkedthreads in any scenario...
 
 Planned features
 ================
