@@ -366,14 +366,14 @@ no dependency checking), which is tolerable at the current size of things.
 
 After a successful build, you get libraries at **lib/** as follows:
 
-** Every library is available both as a static **lib*.a** file a dynamic **lib*.so** file.
-** **libcheckedthreads++** has all the enabled features.
-** **libcheckedthreads** has all the enabled features except those relying on C++ (the C++11 API and the TBB-based scheduler).
-** If OpenMP is enabled, **libcheckedthreads++_openmp** has all the enabled features but only one parallel scheduler,
+* Every library is available both as a static **lib*.a** file a dynamic **lib*.so** file.
+* **libcheckedthreads++** has all the enabled features.
+* **libcheckedthreads** has all the enabled features except those relying on C++ (the C++11 API and the TBB-based scheduler).
+* If OpenMP is enabled, **libcheckedthreads++_openmp** has all the enabled features but only one parallel scheduler,
 the one based on OpenMP. **libcheckedthreads_openmp** is similar, except that it also doesn't use C++.
-** Similarly, if pthreads are enabled, **libcheckedthreads++_pthreads** and **libcheckedthreads_pthreads**
+* Similarly, if pthreads are enabled, **libcheckedthreads++_pthreads** and **libcheckedthreads_pthreads**
 are built.
-** Similarly, if TBB is enabled, **libcheckedthreads++_tbb** is built (but not libcheckedthreads_tbb because
+* Similarly, if TBB is enabled, **libcheckedthreads++_tbb** is built (but not libcheckedthreads_tbb because
 TBB requires C++).
 
 This variety of libraries should hopefully make it easy to link with checkedthreads in any scenario...
