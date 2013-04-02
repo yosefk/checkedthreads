@@ -83,8 +83,9 @@ Details:
 * **A C89 as well as a C++11 API**. No compiler extensions (#pragmas, keywords, etc.) are involved.
   While C++11 lambdas and variadic templates are used to provide some syntactic
   sugar, the underlying C89 API is useable directly as well.
-* **Free** as in no license, no charge, and no restrictions on how the code may be used. Also
-  no warranty of course.
+* **Free** as in "licensed under the FreeBSD license" (the 2-clause thing, see LICENSE.txt).
+  I'll gladly license the code under any other license if you want - I originally just said "do whatever you
+  want with the code", but people worried that lawyers would much prefer a standard license.
 * **Portability**. Very little is assumed about the target platform. It is enough to have a C89
   compiler and an address space shared by a bunch of threads. In fact, you don't even need "threads"
   as in "an OS with preemptive scheduling"; you could rather easily port checkedthreads to run
