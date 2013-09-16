@@ -1,7 +1,9 @@
 #include "checkedthreads.h"
 #include "time.h"
 #include <stdio.h>
+#ifdef CT_TBB
 #include <tbb/tbb.h>
+#endif
 #include <numeric>
 #include <algorithm>
 
@@ -39,11 +41,15 @@ int main() {
     usec_t s2 = curr_usec();
     int sum2 = ctx_accumulate(arr, arr+N, 20, plus, 1024*32);
     usec_t s3 = curr_usec();
+#ifdef CT_TBB
     int sum3 = tbb::parallel_reduce(tbb::blocked_range<int>(0, N, 1024*32), 0,
             [arr](const tbb::blocked_range<int>& r, int init)->int {
                 return std::accumulate(arr+r.begin(), arr+r.end(), init);
             },
             plus) + 20;
+#else
+    int sum3 = sum2;
+#endif
     usec_t s4 = curr_usec();
     printf("sum:\nserial: %d\nparallel: %d\nTBB: %d\n", int(s2-s1), int(s3-s2), int(s4-s3));
     ct_fini();
@@ -53,3 +59,4 @@ int main() {
     }
     return 0;
 }
+
