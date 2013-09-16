@@ -2,7 +2,9 @@
 #include "time.h"
 #include <algorithm>
 #include <stdio.h>
+#ifdef CT_TBB
 #include <tbb/tbb.h>
+#endif
 
 void a(void*) { printf("a\n"); }
 void b(void*) { printf("b\n"); }
@@ -150,12 +152,14 @@ int main(int argc, char** argv)
     );
 #endif
     int* nums=0;
-    const int nsorts = 3;
-    const char* descr[nsorts] = {
+    const char* descr[] = {
         "quicksort",
         "mergesort",
+#ifdef CT_TBB
         "TBB  sort",
+#endif
     };
+    const int nsorts = sizeof descr / sizeof descr[0];
 
     for(int t=0; t<nsorts; ++t) {
         nums = new int[N];
@@ -169,7 +173,9 @@ int main(int argc, char** argv)
         switch(t) {
             case 0: quicksort(nums, nums+N); break;
             case 1: mergeSort(nums, new int[N], N); break;
+#ifdef CT_TBB
             case 2: tbb::parallel_sort(nums, nums+N); break;
+#endif
             default: break;
         };
         unsigned long long usec_finish = curr_usec();
